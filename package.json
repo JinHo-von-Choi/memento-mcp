@@ -1,0 +1,24 @@
+{
+  "name": "memento-mcp",
+  "version": "1.0.0",
+  "description": "Fragment-Based Memory MCP Server",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "ioredis": "^5.9.3",
+    "js-tiktoken": "^1.0.21",
+    "openai": "^6.21.0",
+    "pg": "^8.18.0",
+    "node-fetch": "^3.3.2",
+    "prom-client": "^15.1.3",
+    "winston": "^3.19.0",
+    "winston-daily-rotate-file": "^5.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  }
+}
