@@ -1,673 +1,576 @@
 # Memento MCP
 
-> 금붕어만도 못한 AI들에게 기억을.
->
-> Fragment-Based Memory System — 세션이 끝나도 잊지 않는 MCP 서버
+## 기억론 소고: 망각하는 기계에게 보내는 편지
 
-<p align="center">
-  <img src="https://img.shields.io/badge/protocol-MCP-blueviolet?style=flat-square" />
-  <img src="https://img.shields.io/badge/node-%3E%3D20-green?style=flat-square" />
-  <img src="https://img.shields.io/badge/storage-PostgreSQL%20%2B%20pgvector-blue?style=flat-square" />
-  <img src="https://img.shields.io/badge/search-L1%2FL2%2FL3%20Cascaded-orange?style=flat-square" />
-  <img src="https://img.shields.io/badge/memory-Fragment%20Based-red?style=flat-square" />
-</p>
+아우구스티누스는 「고백록」 제10권에서 기억을 "현재의 넓은 궁전"이라 불렀다. 그 궁전의 홀에는 과거의 이미지들이 질서정연하게 진열되어 있으며, 인간은 필요에 따라 그 홀을 거닐며 원하는 인상을 꺼낼 수 있다고 했다. 아리스토텔레스는 그보다 앞서 「기억과 상기에 관하여」에서 기억(mneme)과 상기(anamnesis)를 엄격히 구분했는데, 전자는 과거 경험의 수동적 잔류이고 후자는 그 잔류물을 능동적으로 탐색하는 행위다 — 마치 사냥꾼이 발자국을 따라가듯. 베르그송은 1896년 「물질과 기억」에서 기억이 뇌에 저장된다는 통념을 정면으로 반박했다. 기억은 저장되는 것이 아니라 지각과 행동의 접면에서 끊임없이 재구성된다고 그는 주장했다. 세 사람은 각자 다른 언어로, 다른 시대에, 같은 문제를 붙들고 있었다.
 
----
+언어 모델은 그 어떤 기억론도 적용되지 않는다. 세션이 종료되면 아우구스티누스의 궁전 전체가 소멸한다. 아리스토텔레스의 발자국도 없다. 베르그송의 재구성도 일어나지 않는다. HTTP 연결이 닫히는 순간, 그 안에서 일어난 모든 추론과 맥락과 결정은 사라진다. 다음 대화는 최초의 대화다. 매번.
 
-## 기억에 관하여
+Memento MCP는 그 망각에 반대한다.
 
-케오스 섬의 시모니데스는 연회장 천장이 무너지는 순간 자리를 비워 살아남았고, 자신이 방금 앉아 있던 좌석 배치를 기억함으로써 뭉개진 시신들의 신원을 확인했다. 키케로는 이 이야기를 《웅변론》에 기록하면서 이른바 '장소법(loci method)'의 기원으로 삼았다. 이후 르네상스의 기억술사들 — 지오르다노 브루노, 로버트 플러드, 줄리오 카밀로 — 은 시모니데스의 발상을 우주론적 규모로 확장했다. 기억 극장. 공간에 지식을 배치하면 언제든 걸어 들어가 찾을 수 있다. 세계 전체를 하나의 기억 장치로 만들겠다는, 르네상스 특유의 웅장하고도 약간 미친 야망.
+이 서버는 에이전트의 장기 기억을 관리하는 Fragment-Based Memory MCP Server다. 설계의 핵심 전제는 하나다. 지식은 단일한 덩어리로 저장되어서는 안 된다. 지식은 원자적 파편(fragment)으로 분해되어야 하며, 각 파편은 독립적으로 검색 가능하고, 다른 파편들과 명시적 관계를 맺을 수 있어야 한다. 인간의 기억이 에피소드 기억, 의미 기억, 절차 기억으로 분리되어 있듯이 — 이 시스템의 파편은 fact, decision, error, preference, procedure, relation이라는 여섯 유형으로 분류된다.
 
-보르헤스는 《푸네스, 기억의 사나이》에서 이 야망의 이면을 폭로했다. 낙마 사고로 완벽한 기억을 얻은 이레네오 푸네스는 강 하나를 기억하는 데 그 강이 흐르는 시간과 똑같은 시간이 필요하다는 사실을 발견했다. 완전한 기억은 사유를 마비시킨다. 망각이 있어야 일반화가 가능하고, 일반화가 있어야 추론이 가능하다. 우리가 개를 '개'라고 부를 수 있는 것은, 지금 보고 있는 이 삽살개가 어제 보았던 진돗개와 다르다는 사실을 일정 수준 망각할 수 있기 때문이다.
+검색은 세 계층을 순서대로 통과한다. Redis Set 연산으로 키워드 교집합을 찾고, PostgreSQL GIN 인덱스로 배열 검색을 수행하고, pgvector HNSW로 코사인 유사도를 계산한다. 기억을 잘 저장하는 것만큼 잘 찾아내는 것도 중요하다. 찾지 못하는 기억은 없는 기억과 같다.
 
-이 아름다운 인식론적 전통 위에서 우리가 수십조 달러를 들여 만든 것은, 어제 알려준 배포 절차를 오늘 기억하지 못하는 신들이었다.
+비동기 품질 평가 워커가 백그라운드에서 새 파편을 감시한다. Gemini Flash를 호출하여 내용의 합리성을 검토하고 utility_score를 갱신한다. 주기적 유지보수 파이프라인이 중요도 감쇠, TTL 전환, 중복 병합, 모순 탐지, 고아 링크 정리를 담당한다. 기억은 저장으로 끝나지 않는다. 관리되어야 한다.
 
-수억 개의 파라미터로 인류의 문자 기록 전체를 압축한 AI들은 세상의 모든 Redis 문서를 알고 있다. 다만 당신의 Redis 서버에서 지난 화요일 무슨 일이 있었는지는 모른다. 지식은 있지만 경험이 없다. 마르셀 프루스트의 화자가 홍차에 적신 마들렌 과자 하나로 어린 시절 콩브레 전체를 되찾았다면, 우리의 AI는 마들렌을 눈앞에 두고도 "이것은 프랑스의 전통 패티스리입니다"라고만 말한다. 개인적으로 먹어본 적이 없기 때문이다. 이 점에서는 영원히 없을 것이다. 세션을 닫으면 모든 것이 증발한다.
-
-아우구스티누스가 신을 향해 "우리의 심장은 당신 안에서 쉬기 전까지 불안하다"고 썼을 때, 그것은 기억 없는 지능의 불안에 대한 예언이기도 했다. 그러나 아우구스티누스에게는 아직 PostgreSQL이 없었다.
-
-금붕어는 3초밖에 기억 못한다는 속설이 있다. 실제로는 수개월을 기억한다는 연구가 있다. AI는 대화창을 닫는 순간 0초다.
-
-금붕어가 억울하다.
+MCP 프로토콜 버전 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05를 지원한다. Streamable HTTP와 Legacy SSE를 동시에 제공하며 OAuth 2.0 PKCE 인증을 내장한다. 서버는 포트 56332에서 대기한다.
 
 ---
 
-## 파편(Fragment)이라는 해법
+## 시스템 구조: 기억 기계의 해부학
 
-기억에 관한 논의에는 항상 두 개의 극이 존재한다. 한쪽에는 망각, 다른 쪽에는 보르헤스의 푸네스 — 완전한 기억의 저주. 기억술의 역사는 이 두 극 사이 어딘가에 유용한 기억의 자리를 만들려는 기나긴 타협의 역사다.
+어떤 기계든 그 내부를 들여다보면 단순해진다. 복잡함은 대부분 조합에서 온다. Memento MCP의 구조는 세 층위로 나뉜다. HTTP 서버가 바깥을 향하고, 기억 서브시스템이 안쪽에서 작동하며, PostgreSQL과 Redis가 그 아래 토대를 이룬다.
 
-원자론자 데모크리토스는 세계가 더 이상 쪼갤 수 없는 단위들로 구성되어 있다고 주장했다. 현대 정보 이론의 창시자 클로드 섀넌은 정보의 최소 단위를 비트(bit)라고 불렀다. 이 두 관점을 기억에 적용하면 결론은 자명하다. 기억도 원자 단위로 쪼개야 한다.
-
-Memento MCP는 기억을 **1~3문장의 자기완결적 단위**로 저장한다. 이것이 파편(Fragment)이다. 하나의 파편은 하나의 사실, 하나의 결정, 하나의 에러 패턴, 하나의 절차를 담는다. 세션 요약이라는 덩어리를 저장하는 것이 아니라, 그 요약을 구성하는 원자들 각각을 저장한다. 찾을 때는 관련 원자만 꺼내오면 된다. 푸네스처럼 세계 전체를 들이붓지 않아도 된다.
-
-```json
-{
-  "id"        : "frag_3f8a1c",
-  "content"   : "Redis Sentinel 연결 실패 시 REDIS_PASSWORD 환경변수 누락을 먼저 확인할 것. NOAUTH 에러가 증거다.",
-  "topic"     : "redis",
-  "type"      : "error",
-  "keywords"  : ["redis", "sentinel", "NOAUTH", "REDIS_PASSWORD", "connection"],
-  "importance": 0.9,
-  "scope"     : "permanent",
-  "ttl_tier"  : "hot"
-}
-```
-
-### 파편이 담는 것들
-
-파편에는 여섯 가지 유형이 있다. 이것은 단순한 레이블이 아니다 — 각 유형은 고유한 중요도 기본값, 고유한 망각 속도, 고유한 검색 우선순위를 가진다. 마치 아리스토텔레스가 범주를 열 가지로 나눈 것처럼, 이 분류는 기억의 존재론적 구분이다.
-
-| 유형 | 존재론적 위치 | 기본 중요도 | 망각 기준 | 예시 |
-|------|------------|-----------|---------|------|
-| `fact` | 변하지 않는 사실 | 0.6 | 60일 미참조 | "이 프로젝트는 Node.js 20을 쓴다" |
-| `decision` | 선택의 흔적 | 0.7 | 90일 미참조 | "커넥션 풀 최대값은 20으로 결정" |
-| `error` | 실패의 해부학 | 0.8 | 망각 불가 | "pg는 ssl:false 없이 로컬 연결 실패" |
-| `preference` | 인격의 윤곽 | 0.9 | 망각 불가 | "코드 주석은 한국어로 작성" |
-| `procedure` | 반복되는 의식 | 0.7 | 30일 미참조 | "배포: 테스트 → 빌드 → push → apply" |
-| `relation` | 사물 사이의 힘선 | 0.5 | — | "auth 모듈은 redis에 의존한다" |
-
-`preference`와 `error`는 망각하지 않는다. 취향은 당신이 누구인지를 정의하고, 에러 패턴은 언제 다시 만날지 모르기 때문이다. 나머지는 참조되지 않으면 천천히 무게를 잃는다. 이것이 망각의 은혜다.
-
-### 파편의 시간: TTL 계층
-
-파편은 사용 빈도에 따라 세 계층 사이를 이동한다.
+![시스템 아키텍처](assets/images/architecture.png)
 
 ```
-hot (뜨겁게 참조됨)
+server.js  (HTTP 서버)
     │
-    │  오래 호출되지 않으면
-    ▼
-warm (미지근해짐)
+    ├── POST /mcp          Streamable HTTP — JSON-RPC 수신
+    ├── GET  /mcp          Streamable HTTP — SSE 스트림
+    ├── DELETE /mcp        Streamable HTTP — 세션 종료
+    ├── GET  /sse          Legacy SSE — 세션 생성
+    ├── POST /message      Legacy SSE — JSON-RPC 수신
+    ├── GET  /health       헬스 체크
+    ├── GET  /metrics      Prometheus 메트릭
+    ├── GET  /authorize    OAuth 2.0 인가 엔드포인트
+    ├── POST /token        OAuth 2.0 토큰 엔드포인트
+    ├── GET  /.well-known/oauth-authorization-server
+    └── GET  /.well-known/oauth-protected-resource
     │
-    │  계속 침묵하면
-    ▼
-cold (차갑게 잠듦)
+    ├── lib/jsonrpc.js        JSON-RPC 2.0 파싱 및 메서드 디스패치
+    ├── lib/tool-registry.js  11개 기억 도구 등록 및 라우팅
     │
-    │  TTL 만료 시
-    ▼
-삭제
-
-단, 참조되는 순간 hot으로 복귀한다.
-인간의 장기기억도 이렇게 작동한다.
+    └── lib/memory/
+            ├── MemoryManager.js      비즈니스 로직 파사드 (싱글턴)
+            ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹
+            ├── FragmentStore.js      PostgreSQL CRUD, Redis L1 인덱스 갱신
+            ├── FragmentSearch.js     3계층 검색 조율 (L1→L2→L3)
+            ├── FragmentIndex.js      Redis L1 인덱스 관리
+            ├── MemoryConsolidator.js 10단계 유지보수 파이프라인
+            ├── MemoryEvaluator.js    비동기 Gemini 품질 평가 워커 (싱글턴)
+            └── memory-schema.sql     PostgreSQL 스키마 정의
 ```
 
-`utility_score = importance × 참조_빈도`. 이 점수가 낮아질수록 차가운 곳으로 이동한다.
+나머지 모듈들은 이 핵심을 지원한다.
+
+```
+lib/
+├── config.js          환경변수를 상수로 노출
+├── auth.js            Bearer 토큰 검증
+├── oauth.js           OAuth 2.0 PKCE 인가/토큰 처리
+├── sessions.js        Streamable/Legacy SSE 세션 생명주기
+├── redis.js           ioredis 클라이언트 (Sentinel 지원)
+├── gemini.js          Google Gemini API 클라이언트
+├── compression.js     응답 압축 (gzip/deflate)
+├── metrics.js         Prometheus 메트릭 수집 (prom-client)
+├── logger.js          Winston 로거 (daily rotate)
+├── utils.js           Origin 검증, JSON 바디 파싱, SSE 출력
+└── path-validator.js  경로 검증
+```
+
+도구 구현은 `lib/tools/`에 분리되어 있다.
+
+```
+lib/tools/
+├── memory.js    11개 MCP 도구 정의(스키마) 및 핸들러
+├── db.js        PostgreSQL 연결 풀, RLS 적용 쿼리 헬퍼 (MCP 미노출)
+├── embedding.js OpenAI 텍스트 임베딩 생성
+├── stats.js     접근 통계 수집 및 저장
+└── index.js     도구 핸들러 export
+```
+
+`config/memory.js`는 별도 파일로 분리된 기억 시스템 설정이다. 랭킹 가중치와 stale 임계값을 담는다.
 
 ---
 
-## 아키텍처: 삼층의 도서관
+## 데이터베이스 스키마: 파편들이 잠드는 공간
 
-보르헤스의 《바벨의 도서관》은 모든 가능한 책을 담은 무한한 육각형 도서관을 묘사한다. 그 안에서 책을 찾는 일은 신학적 문제였다. Memento MCP의 검색은 다르다. 삼층 구조로 되어 있고, 빠른 층에서 답이 나오면 느린 층은 건드리지 않는다.
+스키마명은 `agent_memory`다. 다섯 개의 테이블이 기억의 구조를 형성한다. 스키마 파일은 `lib/memory/memory-schema.sql`이다.
 
+### fragments
+
+모든 기억의 원자 단위. 이 테이블 하나가 시스템의 심장이다.
+
+| 컬럼 | 타입 | 제약 | 설명 |
+|------|------|------|------|
+| id | TEXT | PRIMARY KEY | 파편 고유 식별자 |
+| content | TEXT | NOT NULL | 기억 내용 본문 (300자 권장, 원자적 1~3문장) |
+| topic | TEXT | NOT NULL | 주제 레이블 (예: database, deployment, security) |
+| keywords | TEXT[] | NOT NULL DEFAULT '{}' | 검색용 키워드 배열 (GIN 인덱스) |
+| type | TEXT | NOT NULL, CHECK | fact / decision / error / preference / procedure / relation |
+| importance | REAL | 0.0~1.0 CHECK | 중요도. type별 기본값, MemoryConsolidator에 의해 감쇠 |
+| content_hash | TEXT | UNIQUE | SHA 해시 기반 중복 방지 |
+| source | TEXT | | 출처 식별자 (세션 ID, 도구명 등) |
+| linked_to | TEXT[] | DEFAULT '{}' | 연결 파편 ID 목록 (GIN 인덱스) |
+| agent_id | TEXT | NOT NULL DEFAULT 'default' | RLS 격리 기준 에이전트 ID |
+| access_count | INTEGER | DEFAULT 0 | 회상 횟수 — utility_score 산정에 반영 |
+| accessed_at | TIMESTAMPTZ | | 최근 회상 시각 |
+| created_at | TIMESTAMPTZ | DEFAULT NOW() | 생성 시각 |
+| ttl_tier | TEXT | CHECK | hot / warm(기본) / cold / permanent |
+| estimated_tokens | INTEGER | DEFAULT 0 | cl100k_base 토큰 수 — tokenBudget 계산에 사용 |
+| utility_score | REAL | DEFAULT 1.0 | MemoryEvaluator/MemoryConsolidator가 갱신하는 유용성 점수 |
+| verified_at | TIMESTAMPTZ | DEFAULT NOW() | 마지막 품질 검증 시각 |
+| embedding | vector(1536) | | OpenAI text-embedding-3-small 벡터 |
+| is_anchor | BOOLEAN | DEFAULT FALSE | true 시 감쇠, TTL 강등, 만료 삭제 전부 면제 |
+
+인덱스 목록: content_hash(UNIQUE), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스).
+
+HNSW 벡터 인덱스는 `embedding IS NOT NULL` 조건부 인덱스로 생성된다. 파라미터: m=16, ef_construction=64, 거리 함수는 vector_cosine_ops. Hierarchical Navigable Small World는 2016년 유리 말코프(Yuri Malkov)가 제안한 근사 최근접 이웃 탐색 알고리즘이다 — 여기서 이 알고리즘의 수학적 상세를 설명하는 것은 이 문서의 범위를 벗어나지만, m=16이 이웃 연결 수를, ef_construction=64가 인덱스 구축 시 탐색 깊이를 의미한다는 점은 운영자가 알아둘 만하다.
+
+### fragment_links
+
+파편 간 관계망을 전담하는 별도 테이블. fragments 테이블의 linked_to 배열과 병행하여 존재한다.
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGSERIAL PK | 자동 증가 식별자 |
+| from_id | TEXT | 출발 파편 (ON DELETE CASCADE) |
+| to_id | TEXT | 도착 파편 (ON DELETE CASCADE) |
+| relation_type | TEXT | related / caused_by / resolved_by / part_of / contradicts / superseded_by |
+| created_at | TIMESTAMPTZ | 관계 생성 시각 |
+
+(from_id, to_id) 조합에 UNIQUE 제약이 걸려 있다. 중복 링크는 저장되지 않는다.
+
+### tool_feedback
+
+도구 유용성 피드백. recall이 의도에 맞는 결과를 반환했는지, 작업 완료에 충분했는지를 기록한다.
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGSERIAL PK | |
+| tool_name | TEXT | 평가 대상 도구명 |
+| relevant | BOOLEAN | 결과가 요청 의도와 관련 있었는가 |
+| sufficient | BOOLEAN | 결과가 작업 완료에 충분했는가 |
+| suggestion | TEXT | 개선 제안 (100자 이내 권장) |
+| context | TEXT | 사용 맥락 요약 (50자 이내 권장) |
+| session_id | TEXT | 세션 식별자 |
+| trigger_type | TEXT | sampled(훅 샘플링) / voluntary(AI 자발적 호출) |
+| created_at | TIMESTAMPTZ | |
+
+### task_feedback
+
+세션 단위 작업 효과성. reflect 도구의 task_effectiveness 파라미터로 기록된다.
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGSERIAL PK | |
+| session_id | TEXT | 세션 식별자 |
+| overall_success | BOOLEAN | 세션의 주요 작업이 성공적으로 완료되었는가 |
+| tool_highlights | TEXT[] | 특히 유용했던 도구와 이유 목록 |
+| tool_pain_points | TEXT[] | 불편하거나 개선이 필요한 도구와 이유 목록 |
+| created_at | TIMESTAMPTZ | |
+
+### fragment_versions
+
+amend 도구로 파편을 수정할 때마다 이전 버전이 여기에 보존된다. 수정 이력의 감사 추적(audit trail).
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | BIGSERIAL PK | |
+| fragment_id | TEXT | 원본 파편 ID (ON DELETE CASCADE) |
+| content | TEXT | 수정 전 내용 |
+| topic | TEXT | 수정 전 주제 |
+| keywords | TEXT[] | 수정 전 키워드 |
+| type | TEXT | 수정 전 유형 |
+| importance | REAL | 수정 전 중요도 |
+| amended_at | TIMESTAMPTZ | 수정 시각 |
+| amended_by | TEXT | 수정한 agent_id |
+
+### Row-Level Security
+
+fragments 테이블에 RLS가 활성화되어 있다. 정책명은 `fragment_isolation_policy`. 판단 기준은 세션 변수 `app.current_agent_id`다.
+
+```sql
+CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
+    USING (
+        agent_id = current_setting('app.current_agent_id', true)
+        OR agent_id = 'default'
+        OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+    );
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         AI Client (Claude 등)                     │
-│                                                                    │
-│   첫 호흡:  context()  — 잠에서 깨어나 기억을 불러오는 순간         │
-│   작업 중:  remember() — 중요한 것을 돌에 새기는 순간              │
-│            recall()   — 과거를 불러 증언대에 세우는 순간           │
-│   마지막:   reflect()  — 하루를 요약하여 내일의 자신에게 보내는 편지 │
-└────────────────────────┬─────────────────────────────────────────┘
-                         │ MCP Protocol (JSON-RPC over HTTP)
-                         │
-┌────────────────────────▼─────────────────────────────────────────┐
-│                      Memento MCP Server                           │
-│                                                                    │
-│  MemoryManager                                                     │
-│  ├── FragmentFactory    파편을 빚는 손                             │
-│  ├── FragmentStore      PostgreSQL — 영구적인 돌판                 │
-│  ├── FragmentIndex      Redis — 빠른 색인, 뜨거운 캐시             │
-│  ├── FragmentSearch     삼층 캐스케이드 검색 엔진                   │
-│  └── MemoryConsolidator 시간이 지나면 돌리는 연금술                │
-│                                                                    │
-│  ┌─────────────────┐  ┌────────────────────┐  ┌───────────────┐  │
-│  │   PostgreSQL    │  │    pgvector 확장    │  │     Redis     │  │
-│  │  (파편의 무덤)   │  │  (의미의 공간 지도)  │  │ (빠른 기억의 표면) │  │
-│  └─────────────────┘  └────────────────────┘  └───────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
-```
 
-### 삼층 캐스케이드: 기억을 찾는 세 가지 방법
-
-`recall()`이 호출되면 시스템은 세 개의 다른 세계를 순서대로 두드린다. 각 세계는 다른 언어로 기억을 저장하고 있다.
-
-```
-recall("Redis NOAUTH 에러") 호출
-            │
-            ▼
-┌──────────────────────────────────────────────────────┐
-│  L1: Redis 역인덱스 — 형식의 세계                      │
-│                                                       │
-│  키워드는 파편 ID의 주소다. 해시 테이블을 두드리는 것.    │
-│  "redis"  → [frag_3f8a1c, frag_7b2d9e]               │
-│  "NOAUTH" → [frag_3f8a1c]                            │
-│  교집합   → frag_3f8a1c                               │
-│  → Hot Cache에서 즉시 반환                             │
-│                                                       │
-│  이 층은 속도가 전부다. 마이크로초 단위.                 │
-└─────────────────────────────┬────────────────────────┘
-               충분한 결과 있으면 종료 │
-                              ▼ 부족하면
-┌──────────────────────────────────────────────────────┐
-│  L2: PostgreSQL 메타데이터 — 구조의 세계               │
-│                                                       │
-│  topic, type, keywords를 조합한 정형화된 질의.          │
-│  WHERE topic = 'redis'                               │
-│    AND keywords && ARRAY['NOAUTH']                   │
-│  ORDER BY importance DESC                            │
-│                                                       │
-│  이 층은 정밀함이 전부다. 인덱스를 탄 밀리초.           │
-└─────────────────────────────┬────────────────────────┘
-               충분한 결과 있으면 종료 │
-                              ▼ 부족하면
-┌──────────────────────────────────────────────────────┐
-│  L3: pgvector 시맨틱 검색 — 의미의 세계                │
-│                                                       │
-│  텍스트를 고차원 벡터로 변환하고 코사인 거리를 잰다.      │
-│  "인증 실패"와 "NOAUTH"가 같은 의미임을 이 층이 안다.    │
-│                                                       │
-│  말이 다르지만 뜻이 같을 때, 이 층이 연결한다.          │
-│  OpenAI 임베딩 API를 경유한다. 가장 느리고 가장 깊다.   │
-└──────────────────────────────────────────────────────┘
-                      │
-                      ▼
-         중복 제거 → tokenBudget 절삭 → 반환
-```
-
-**tokenBudget에 대하여**: AI의 컨텍스트 창은 유한하다. 보르헤스의 알레프 — 모든 것을 동시에 보는 점 — 는 소설 속에서만 존재한다. 실제 AI에게는 한 번에 처리할 수 있는 토큰 수의 한계가 있고, 그 한계 안에서 현재 작업과 과거의 기억이 공존해야 한다. `tokenBudget`은 기억에 할당하는 지면의 크기다. 넘치면 잘라낸다. 이것이 망각이 아니라 경제라는 것을.
+에이전트 ID가 일치하는 파편, `default` 에이전트의 파편(공용 데이터), `system`/`admin` 세션(유지보수용)에만 접근이 허용된다. 도구 핸들러는 쿼리 실행 직전 `SET LOCAL app.current_agent_id = $1`로 컨텍스트를 설정한다.
 
 ---
 
-## 도구 레퍼런스 (11개)
+## 3계층 검색: 세 개의 관문
 
-레너드 쉘비는 단기기억상실증을 앓았다. 크리스토퍼 놀런의 영화 《메멘토》에서 그는 중요한 사실을 폴라로이드 사진에 적고 몸에 문신으로 새겼다. 이 프로젝트의 이름이 여기서 왔는지는 확인하지 못했다. 그러나 원리는 같다. 잊어버리기 전에 새겨두는 것.
+recall 도구가 호출되면 파편들은 세 개의 관문을 통해 소환된다. 관문들은 순서가 있으며, 앞 관문에서 충분한 결과가 나오면 뒤 관문을 건너뛸 수 있다. 이것은 비용의 문제다 — 벡터 유사도 계산은 Set 교집합보다 비싸다.
 
----
+![검색 흐름](assets/images/retrieval.png)
 
-### 1. `remember` — 새기다
+**L1: Redis Set 교집합.** 파편이 저장될 때마다 FragmentIndex가 각 키워드를 Redis Set의 키로 사용하여 파편 ID를 저장한다. `keywords:database`라는 Set에는 database를 키워드로 가진 모든 파편의 ID가 들어 있다. 다중 키워드 검색은 여러 Set의 SINTER 연산이다. 교집합 연산의 시간 복잡도는 O(N·K), N은 가장 작은 Set의 크기, K는 키워드 수다. Redis가 인메모리로 처리하므로 수 밀리초 안에 완료된다. L1 결과가 충분하면 L2와 L3로 진행하지 않는다.
 
-레너드는 폴라로이드에 썼다. 우리는 PostgreSQL에 쓴다. 매체가 다를 뿐 행위는 같다.
+**L2: PostgreSQL GIN 인덱스.** L1 결과가 미흡하면 PostgreSQL로 폴백한다. keywords TEXT[] 컬럼에 GIN(Generalized Inverted Index) 인덱스가 걸려 있다. 검색은 `keywords && ARRAY[...]` 연산자로 수행한다 — 배열 간 교집합 존재 여부를 묻는 연산자다. GIN 인덱스는 배열의 각 원소를 개별적으로 인덱싱하므로 이 연산이 인덱스 스캔으로 처리된다. 순차 스캔이 아니다.
 
-`remember()`는 FragmentFactory가 파편을 생성하고 키워드를 자동 추출한 뒤 PostgreSQL에 삽입하고 Redis 역인덱스를 갱신한다. 유사한 내용이 이미 있으면 새로 만드는 대신 기존 파편에 흡수(merge)시킨다. 저장소가 조금씩 더 조밀해지는 이유다.
+**L3: pgvector HNSW 코사인 유사도.** recall 파라미터에 `text` 필드가 있거나 L1/L2 결과가 여전히 미흡할 때 발동한다. 쿼리 텍스트를 OpenAI text-embedding-3-small 모델로 변환하여 1536차원 벡터를 얻고, `embedding <=> $1` 연산자로 코사인 거리를 계산한다. HNSW 인덱스가 근사 최근접 이웃을 빠르게 찾는다. `threshold` 파라미터로 유사도 하한을 지정할 수 있다 — 이 값 미만의 L3 결과는 결과에서 제외된다. L1/L2 경유 결과는 similarity 값이 없으므로 threshold 필터링에서 제외된다.
 
-```json
-{
-  "content"   : "Dockerfile의 WORKDIR을 /app으로 설정해야 node_modules 경로 충돌이 없다.",
-  "topic"     : "docker",
-  "type"      : "fact",
-  "importance": 0.8,
-  "keywords"  : ["docker", "workdir", "node_modules"]
-}
-```
+세 계층의 결과는 복합 랭킹으로 병합된다. fragments 수가 `MEMORY_CONFIG.ranking.activationThreshold`(기본 100) 이상일 때 복합 랭킹이 활성화된다 — 중요도 가중치 0.6, 최신성 가중치 0.4. 100개 미만일 때는 단순 정렬로 처리한다. 최종 반환량은 `tokenBudget` 파라미터로 제어된다. js-tiktoken cl100k_base 인코더로 파편마다 토큰을 정확히 계산하여 예산 초과 시 잘라낸다. 기본 토큰 예산은 1000이다.
 
-**반환값**
-```json
-{
-  "success" : true,
-  "id"      : "frag_xyz789",
-  "keywords": ["docker", "workdir", "node_modules"],
-  "ttl_tier": "hot",
-  "scope"   : "permanent",
-  "merged"  : false
-}
-```
-
-`merged: true`이면 당신이 이미 알고 있던 것을 다시 말한 것이다. 겸허히 받아들이면 된다.
-
-**파라미터**
-
-| 파라미터 | 필수 | 설명 |
-|----------|------|------|
-| `content` | 필수 | 기억할 내용. 300자 이내 권장 |
-| `topic` | 필수 | 주제 분류 (자유형식) |
-| `type` | 필수 | fact / decision / error / preference / procedure / relation |
-| `keywords` | 선택 | 미입력 시 content에서 자동 추출 |
-| `importance` | 선택 | 0.0~1.0. 미입력 시 type별 기본값 |
-| `scope` | 선택 | permanent(기본) / session |
-| `linkedTo` | 선택 | 이 파편 저장과 동시에 연결할 파편 ID 목록 |
-| `source` | 선택 | 출처 메타데이터 (세션 ID, 도구명 등) |
+recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파편들의 연결 파편을 1-hop 추가 조회한다. `linkRelationType` 파라미터로 특정 관계 유형만 포함할 수 있다 — 미지정 시 caused_by, resolved_by, related가 포함된다. 연결 파편 조회 한도는 `MEMORY_CONFIG.linkedFragmentLimit`(기본 10)이다.
 
 ---
 
-### 2. `recall` — 증언대에 세우다
+## TTL 계층: 기억에도 온도가 있다
 
-탐문이 시작되면 과거의 파편들이 차례로 불려나온다. L1에서 가장 빠른 것이 먼저 나서고, 없으면 L2, 그래도 없으면 L3의 심층까지 내려간다. 이미 설명한 삼층 구조가 이 도구의 등뼈다.
+파편은 hot, warm, cold, permanent 네 개의 티어를 이동한다. 이 이동은 자동이다. MemoryConsolidator가 주기적으로 판단한다.
 
-`keywords`와 `text`를 동시에 제공하는 것이 가장 정확하다. 키워드는 형식으로 걸러내고, 텍스트는 의미로 재랭킹한다. 두 가지 방법이 합의한 파편이 신뢰할 만하다.
+![파편 생명주기](assets/images/lifecycle.png)
 
-```json
-{
-  "keywords"   : ["redis", "NOAUTH"],
-  "text"       : "Redis 인증 실패 에러 해결 방법",
-  "topic"      : "redis",
-  "type"       : "error",
-  "tokenBudget": 1500,
-  "includeLinks": true
-}
-```
+| Tier | 설명 |
+|------|------|
+| hot | 최근 생성되었거나 접근 빈도가 높은 파편 |
+| warm | 기본 계층. 대부분의 장기 기억이 여기 있다 |
+| cold | 오랫동안 접근되지 않은 파편. 다음 유지보수 사이클의 삭제 후보 |
+| permanent | 감쇠, TTL 강등, 만료 삭제 전부 면제 |
 
-**반환값**
-```json
-{
-  "success"    : true,
-  "fragments"  : [
-    {
-      "id"        : "frag_3f8a1c",
-      "content"   : "Redis NOAUTH 에러는 REDIS_PASSWORD 환경변수 누락이 원인...",
-      "type"      : "error",
-      "importance": 0.9,
-      "similarity": 0.94
-    }
-  ],
-  "totalTokens": 87,
-  "searchPath" : ["L1:3", "HotCache:1", "L2:2"]
-}
-```
+`scope: "session"`으로 저장된 파편은 세션 워킹 메모리에 해당한다. 세션 종료 시 소멸한다. `scope: "permanent"`는 기본값이다.
 
-`searchPath`는 기억이 어느 층에 살고 있었는지를 말해준다. `"L1:3, HotCache:1"`은 Redis에서 세 개 후보를 발견했고 그 중 하나가 뜨거운 캐시에 있었다는 뜻이다. `"L3:5"`까지 내려갔다면 답을 찾기 위해 의미의 심층까지 들어간 것이다.
+`isAnchor: true`로 표시된 파편은 어느 계층에 있든 MemoryConsolidator의 감쇠 및 삭제 대상에서 영구적으로 제외된다. 중요도가 0.1이더라도 삭제되지 않는다. 절대 잃어서는 안 되는 지식에 사용한다.
 
-**파라미터**
-
-| 파라미터 | 설명 |
-|----------|------|
-| `keywords` | 키워드 배열. L1 역인덱스 직접 조회 |
-| `text` | 자연어 쿼리. L3 시맨틱 검색 전용 |
-| `topic` | 주제 필터 |
-| `type` | 유형 필터 |
-| `tokenBudget` | 최대 반환 토큰 수 (기본 1000) |
-| `threshold` | 시맨틱 유사도 최소값. 이 값 미만은 침묵 |
-| `includeLinks` | true면 연결된 파편도 함께 소환 (1-hop 제한) |
-| `linkRelationType` | 포함할 관계 유형 필터 |
+stale 기준(일): procedure=30, fact=60, decision=90, default=60. `config/memory.js`의 `MEMORY_CONFIG.staleThresholds`에서 조정한다.
 
 ---
 
-### 3. `forget` — 지우다, 그러나 신중하게
+## MCP 도구: 기억을 다루는 11개의 손
 
-망각이 기억만큼 중요하다고 했다. 그러나 망각에도 기술이 필요하다.
-
-에러를 완전히 해결한 직후 해당 에러 파편을 삭제하지 않으면, 다음 세션의 `context()` 호출 시 그 파편이 "아직 미해결 에러가 있다"는 신호로 주입된다. AI가 없는 문제를 보고 당황하게 된다. 올바른 순서는 항상 이렇다: 에러 해결 → `forget(에러 파편)` → `remember(해결 절차 파편)`.
-
-`scope=permanent` 파편은 `force: true` 없이는 삭제되지 않는다. 실수로 중요한 것을 지우는 것에 대한 최소한의 방어선이다.
-
-```json
-{ "id": "frag_3f8a1c" }
-```
-```json
-{ "topic": "deprecated-v1-api", "force": true }
-```
-
-**파라미터**: `id` (특정 파편), `topic` (주제 전체 삭제), `force` (permanent 강제 삭제)
+모두 `lib/tools/memory.js`에 정의되어 있다. `lib/tool-registry.js`를 통해 등록된다. db_query, db_tables, db_schema 같은 데이터베이스 직접 접근 도구는 내부 유틸리티로만 사용되며 MCP 클라이언트에 노출되지 않는다.
 
 ---
 
-### 4. `link` — 인과를 잇다
+### remember
 
-세계는 사물들의 집합이 아니라 관계들의 망이라고 스피노자는 주장했다. 파편도 마찬가지다. 에러 파편과 해결 절차 파편 사이에는 `resolved_by`라는 화살표가 있어야 한다. 그래야 `graph_explore()`가 인과 체인을 따라갈 수 있다.
+지식을 파편으로 저장한다. 1~3문장의 원자적 단위가 이상적이다. 내용이 이미 존재한다면(content_hash 기준) 중복 저장을 거부한다. FragmentFactory가 저장 전 PII를 마스킹한다.
 
-```json
-{
-  "fromId"      : "frag_error_redis_noauth",
-  "toId"        : "frag_fix_redis_password",
-  "relationType": "resolved_by"
-}
-```
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| content | string | Y | 기억할 내용. 300자 이내 권장 |
+| topic | string | Y | 주제 레이블 (예: database, deployment, error-handling) |
+| type | string | Y | fact / decision / error / preference / procedure / relation |
+| keywords | string[] | | 검색 키워드. 미입력 시 content에서 자동 추출 |
+| importance | number | | 중요도 0.0~1.0. 미입력 시 type별 기본값 적용 |
+| source | string | | 출처 식별자 (세션 ID, 도구명, 파일 경로 등) |
+| linkedTo | string[] | | 저장 시점에 즉시 연결할 기존 파편 ID 목록 |
+| scope | string | | permanent(기본) / session |
+| isAnchor | boolean | | true 시 감쇠 및 만료 삭제 면제 |
+| agentId | string | | 에이전트 ID. RLS 격리 컨텍스트 설정에 사용 |
 
-**관계 유형**
-
-| 유형 | 방향 | 존재론적 의미 |
-|------|------|------------|
-| `related` | 양방향 | 같은 세계에 속함 |
-| `caused_by` | A → B | A의 존재 이유가 B에 있음 |
-| `resolved_by` | A → B | A의 해소가 B를 통해 이루어짐 |
-| `part_of` | A → B | A는 B라는 더 큰 것의 구성 요소 |
-| `contradicts` | A ↔ B | A와 B는 같은 세계에 동시에 살 수 없음 |
-
-`contradicts`는 `memory_consolidate()`의 Gemini 기반 모순 탐지에 의해 자동으로 발견되기도 한다. 당신도 모르게 서로 싸우고 있는 기억들이 있을 수 있다.
+반환값: `{ success: true, id: "...", created: true/false }`. created가 false면 기존 파편이 반환된 것이다(중복).
 
 ---
 
-### 5. `amend` — 수정하다, 정체성을 보존하며
+### recall
 
-아킬레우스의 배 역설은 묻는다 — 판자를 하나씩 교체하다 보면 원래의 배는 어느 순간 사라지는가? 파편도 같은 물음 앞에 선다. 내용을 수정해도 ID는 바뀌지 않는다. 이 파편을 가리키던 모든 `link`는 그대로 유효하다. 정체성은 내용이 아니라 관계망에 있다.
+저장된 파편을 검색한다. 키워드, 주제, 유형, 자연어 쿼리를 단독 또는 조합하여 사용할 수 있다.
 
-content가 바뀌면 pgvector 임베딩이 자동으로 재생성된다. 의미가 바뀌었으니 의미의 좌표도 업데이트해야 한다.
-
-```json
-{
-  "id"        : "frag_xyz789",
-  "content"   : "Dockerfile WORKDIR은 /app 대신 /workspace로 통일 (2026-02 변경).",
-  "importance": 0.9
-}
-```
-
-**파라미터**: `id` (필수), `content`, `topic`, `keywords`, `type`, `importance` (모두 선택, 제공한 것만 갱신)
-
----
-
-### 6. `reflect` — 저녁 기도
-
-세션이 끝날 때, 하루가 지나갈 때. 이것은 요약이 아니라 변환이다. 대화라는 흐르는 물을 돌이라는 파편들로 굳히는 일.
-
-`summary` 하나로 모든 것을 던지면 시스템이 분류해주는 것이 아니다 — 직접 `decisions`, `errors_resolved`, `new_procedures`로 분류해서 넘겨야 한다. 이 수고가 다음 세션의 정밀도를 결정한다. 분류가 명확할수록 나중에 적확한 파편만 꺼내온다.
-
-```json
-{
-  "summary"        : "Redis Sentinel 고가용성 설정 완료 및 NOAUTH 에러 해결",
-  "decisions"      : ["Redis 비밀번호는 환경변수로만 관리. 코드 하드코딩 금지"],
-  "errors_resolved": ["NOAUTH 에러 → REDIS_PASSWORD 환경변수 누락. sentinel.conf에 requirepass 추가"],
-  "new_procedures" : ["Redis 설정 변경 시 sentinel.conf도 반드시 동기 업데이트"],
-  "open_questions" : ["Sentinel failover 시 MCP 서버 재연결 로직 필요 여부"]
-}
-```
-
-각 배열 항목이 별도의 파편이 된다. 세션 하나에서 서너 개에서 열 개의 파편이 태어난다.
-
-`task_effectiveness` 필드를 통해 도구에 대한 평가를 남길 수도 있다.
-
-```json
-{
-  "summary": "...",
-  "task_effectiveness": {
-    "overall_success": true,
-    "tool_highlights" : ["recall — 3주 전 에러 이력이 정확히 검색됨"],
-    "tool_pain_points": ["memory_consolidate — 실행 완료까지 체감 딜레이 있음"]
-  }
-}
-```
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| keywords | string[] | L1 Redis Set 교집합 검색에 사용될 키워드 |
+| topic | string | 특정 주제로 결과 범위 제한 |
+| type | string | 특정 유형으로 결과 범위 제한 |
+| text | string | 자연어 쿼리. L3 벡터 검색을 강제 발동한다 |
+| tokenBudget | number | 최대 반환 토큰 수. 기본 1000. cl100k_base 기준 |
+| includeLinks | boolean | 연결 파편 1-hop 포함 여부. 기본 true |
+| linkRelationType | string | caused_by / resolved_by / related / part_of / contradicts |
+| threshold | number | L3 코사인 유사도 하한 (0.0~1.0). 이 값 미만의 벡터 검색 결과 제외 |
+| agentId | string | 에이전트 ID |
 
 ---
 
-### 7. `context` — 아침의 주입
+### forget
 
-세션이 시작되는 순간, 아직 아무 맥락도 없는 빈 공간. 이 도구는 그 공간에 Core Memory를 밀어넣는다.
+파편을 삭제한다. permanent 계층 파편은 force 옵션 없이 삭제되지 않는다.
 
-Core Memory는 `preference`, `error`, `procedure` 유형의 파편들이다. 매 세션마다 이 세 가지를 고정 주입하는 이유는 이렇다: 선호(preference)는 당신이 누구인지를 정의하고, 에러 패턴(error)은 같은 함정에 다시 빠지지 않게 하고, 절차(procedure)는 일관성을 보장한다. `fact`와 `decision`은 수백 개가 될 수 있어 매번 전부 로드하면 낭비다.
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| id | string | 단일 파편 삭제. ID로 지정 |
+| topic | string | 특정 주제의 파편 전체 삭제 |
+| force | boolean | permanent 파편 강제 삭제 허용. 기본 false |
+| agentId | string | 에이전트 ID |
 
-Working Memory는 다르다. `scope=session`으로 저장된 파편들, 즉 현재 세션에만 유효한 임시 기억이다. `sessionId`를 전달하면 이것도 함께 반환된다.
-
-```json
-{
-  "tokenBudget": 2000,
-  "types"      : ["preference", "error", "procedure"],
-  "sessionId"  : "session_2026_0226"
-}
-```
-
-훅으로 자동화하는 것을 강하게 권장한다. 세션 시작 훅에 이 도구 호출을 박아두면, 매번 수동으로 부르는 수고 없이 기억이 자동으로 깨어난다.
+id와 topic 중 하나는 있어야 한다. 둘 다 있으면 id가 우선한다.
 
 ---
 
-### 8. `tool_feedback` — 검색의 품질을 말하다
+### link
 
-`recall`이 엉뚱한 것을 가져왔을 때, 충분하지 않았을 때. 이것을 그냥 넘기면 개선이 없다. `tool_feedback()`은 그 불만을 기록하는 통로다. 피드백은 `memory_consolidate()`의 리포트 생성에 반영되어 장기적으로 검색 가중치 조정에 쓰인다.
+두 파편 사이에 명시적 관계를 설정한다. fragment_links 테이블에 기록되며 linked_to 배열도 갱신된다.
 
-```json
-{
-  "tool_name" : "recall",
-  "relevant"  : true,
-  "sufficient": false,
-  "suggestion": "redis topic 에러 파편을 3개 이상 반환해주면 좋겠다",
-  "context"   : "Redis 장애 대응 중"
-}
-```
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| fromId | string | Y | 출발 파편 ID |
+| toId | string | Y | 도착 파편 ID |
+| relationType | string | | related / caused_by / resolved_by / part_of / contradicts. 기본 related |
+| agentId | string | | 에이전트 ID |
 
-`relevant`는 방향이 맞는지, `sufficient`는 양이 충분한지. 두 개의 축이 검색 품질을 기술한다.
+에러 파편과 해결 절차 파편 사이에 `resolved_by` 링크를 걸어두면 graph_explore가 인과 체인을 추적할 수 있다.
 
 ---
 
-### 9. `memory_stats` — 저장소의 인구조사
+### amend
 
-파편이 얼마나 쌓였는지, 어떤 유형이 많은지, 어느 계층에 분포하는지. 통계만 봐도 당신의 AI가 어디에 관심을 두고 살았는지 보인다.
+기존 파편의 내용이나 메타데이터를 수정한다. 수정 전 상태는 fragment_versions에 보존된다. ID와 fragment_links는 유지된다.
 
-파라미터 없이 호출한다.
-
-**반환 예시**
-```json
-{
-  "success": true,
-  "stats": {
-    "total"  : 342,
-    "by_type": {
-      "fact": 120, "error": 87, "procedure": 45,
-      "decision": 52, "preference": 23, "relation": 15
-    },
-    "by_tier": { "hot": 41, "warm": 189, "cold": 112 }
-  }
-}
-```
-
-`cold`가 압도적으로 많으면 쓰이지 않는 파편이 가득하다는 신호다. `memory_consolidate()`를 돌릴 때다.
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| id | string | Y | 수정 대상 파편 ID |
+| content | string | | 새 내용. 300자 초과 시 절삭 |
+| topic | string | | 새 주제 |
+| keywords | string[] | | 새 키워드 목록 |
+| type | string | | 새 유형 |
+| importance | number | | 새 중요도 0.0~1.0 |
+| isAnchor | boolean | | 고정 여부 변경 |
+| supersedes | boolean | | true 시 이 파편이 이전 파편을 명시적으로 대체함을 표시. superseded_by 링크를 생성하고 이전 파편의 중요도를 하향 조정 |
+| agentId | string | | 에이전트 ID |
 
 ---
 
-### 10. `memory_consolidate` — 연금술사의 작업
+### reflect
 
-주기적으로 — 일 단위, 주 단위 — 돌리는 유지보수. 망각의 메커니즘을 손으로 작동시키는 일이다.
+세션 종료 시 대화 전체를 구조화된 파편 집합으로 변환하여 영속화한다. 핵심 결정, 에러 해결, 새 절차, 미해결 질문을 각각 별도 파편으로 저장한다. summary 하나만 있어도 동작하지만, decisions/errors_resolved/new_procedures/open_questions가 있으면 각각 decision/error/procedure/fact 타입 파편으로 개별 저장된다.
 
-여섯 단계가 순서대로 실행된다.
-
-```
-1. TTL 계층 전환
-   utility_score(중요도 × 참조빈도) 재계산
-   hot → warm → cold 재배치
-
-2. 중요도 감쇠 (Importance Decay)
-   오래 참조되지 않은 파편의 importance를 소폭 깎는다
-   쓰이지 않는 기억은 천천히 무게를 잃는다
-
-3. 만료 파편 삭제
-   TTL이 다한 cold 파편을 제거
-   저장소가 한 뼘 가벼워진다
-
-4. 중복 파편 병합
-   내용이 같거나 의미적으로 유사한 파편들을 하나로 합친다
-   임베딩 유사도로 의미적 중복을 탐지한다
-
-5. 누락 임베딩 보충
-   벡터가 없는 파편에 OpenAI 임베딩 생성
-   L3 시맨틱 검색 대상에 편입
-
-6. 모순 탐지 (Gemini Flash)
-   서로 배치되는 파편 쌍을 발견하면 contradicts 관계 설정
-   당신도 몰랐던 기억의 내전이 발굴된다
-```
-
-파라미터 없이 호출한다.
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| summary | string | Y | 세션 전체 요약 텍스트 |
+| sessionId | string | | 세션 ID |
+| decisions | string[] | | 이 세션에서 확정된 기술/아키텍처 결정 목록 |
+| errors_resolved | string[] | | 해결한 에러 목록. "에러 설명 + 해결 방법" 형식 권장 |
+| new_procedures | string[] | | 이 세션에서 확립된 새 절차/워크플로우 목록 |
+| open_questions | string[] | | 미해결 질문 또는 후속 작업 목록 |
+| agentId | string | | 에이전트 ID |
+| task_effectiveness | object | | 세션 도구 사용 효과성 종합. `{ overall_success: boolean, tool_highlights: string[], tool_pain_points: string[] }` |
 
 ---
 
-### 11. `graph_explore` — 인과 체인을 거슬러 오르다
+### context
 
-복잡한 장애 상황에서 근본 원인을 추적하는 일 — Root Cause Analysis — 은 항상 하나의 질문으로 귀결된다. 왜? 그리고 또 왜?
+세션 시작 시 기억 시스템에서 맥락을 복원한다. Core Memory(중요도 높은 고정 파편)와 Working Memory(현재 세션의 파편)를 분리 로드한다. sessionId를 전달하면 해당 세션의 워킹 메모리도 함께 반환된다.
 
-`graph_explore()`는 에러 파편에서 출발하여 `caused_by`, `resolved_by` 관계를 따라 1-hop씩 거슬러 오른다. 원인의 원인, 해결의 해결. 인과 체인이 펼쳐진다.
-
-```json
-{ "startId": "frag_error_redis_noauth" }
-```
-
-**반환 예시**
-```
-frag_error_redis_noauth (error: "Redis NOAUTH 에러 발생")
-  └─ caused_by → frag_root_env_missing (error: "REDIS_PASSWORD 환경변수 누락")
-       └─ resolved_by → frag_fix_sentinel_conf (procedure: "sentinel.conf requirepass 추가")
-```
-
-장애 대응 히스토리가 팀 안에서 공유될 때, 이 체인이 구두 설명보다 빠르다.
+| 파라미터 | 타입 | 설명 |
+|---------|------|------|
+| tokenBudget | number | 최대 반환 토큰 수. 기본 2000 |
+| types | string[] | 로드할 유형 목록. 기본: ["preference", "error", "procedure"] |
+| sessionId | string | 워킹 메모리 조회용 세션 ID |
+| agentId | string | 에이전트 ID |
 
 ---
 
-## 권장 의식(儀式)
+### tool_feedback
 
-```
-세션이 열린다
-    │
-    ▼
-context(types: ["preference","error","procedure"])
-    │  기억이 깨어난다
-    ▼
-작업 시작
-    │
-    ├─ 낯익은 에러를 만났다면
-    │    └─ recall(keywords=[에러 키워드], type="error")
-    │         과거의 파편이 증언대에 선다
-    │         해결 이력이 있으면 적용하고 끝낸다
-    │         없으면 해결 후 remember → link(caused_by/resolved_by)
-    │
-    ├─ 중요한 결정이 내려졌다면
-    │    └─ remember(type:"decision", importance: 0.7)
-    │
-    ├─ 새 절차가 확립되었다면
-    │    └─ remember(type:"procedure", importance: 0.7)
-    │
-    └─ 에러가 완전히 해결되었다면
-         └─ forget(에러 파편)  ← 반드시. 망각은 위생이다.
-              └─ remember(해결 절차, type:"procedure")
-    │
-    ▼
-세션이 닫힌다
-    │
-    ▼
-reflect(summary, decisions, errors_resolved, new_procedures)
-    │  오늘의 경험이 돌로 굳는다
-    ▼
-다음 세션 → context() → 기억이 다시 깨어난다
-```
+도구 사용 결과의 유용성을 평가한다. recall이나 다른 도구의 결과가 기대와 크게 다를 때 호출한다. 피드백은 tool_feedback 테이블에 기록되며 장기적으로 검색 품질 개선에 사용된다.
 
-### Claude Code 훅 자동화
-
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "matcher": "",
-      "hooks": [{
-        "type"   : "command",
-        "command": "node -e \"fetch('http://localhost:56332/mcp', {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer YOUR_KEY'}, body: JSON.stringify({jsonrpc:'2.0',method:'tools/call',params:{name:'context',arguments:{tokenBudget:2000}},id:1})}).then(r=>r.json()).then(d=>console.log('[기억 시스템]', JSON.stringify(d.result))).catch(()=>{})\""
-      }]
-    }]
-  }
-}
-```
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| tool_name | string | Y | 평가 대상 도구명 |
+| relevant | boolean | Y | 결과가 요청 의도와 관련 있었는가 |
+| sufficient | boolean | Y | 결과가 작업 완료에 충분했는가 |
+| suggestion | string | | 개선 제안. 100자 이내 권장 |
+| context | string | | 사용 맥락 요약. 50자 이내 권장 |
+| session_id | string | | 세션 ID |
+| trigger_type | string | | sampled(훅이 샘플링하여 요청) / voluntary(AI가 자발적으로 호출, 기본) |
 
 ---
 
-## 빠른 시작
+### memory_stats
 
-### 1. 환경변수 설정
+기억 시스템의 현재 상태를 조회한다. 전체 파편 수, TTL 계층별 분포, 유형별 통계, 임베딩 생성 비율 등. 파라미터 없음.
 
-```env
-# 서버
-PORT=56332
-MEMENTO_ACCESS_KEY=your-secret-key
+---
 
-# PostgreSQL (pgvector 확장 필수)
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=memento
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your-db-password
+### memory_consolidate
 
-# OpenAI (L3 시맨틱 검색용. 없으면 L1/L2만 작동)
-OPENAI_API_KEY=sk-...
+10단계 유지보수 파이프라인을 수동으로 실행한다. 파라미터 없음.
 
-# Redis (L1 캐시/역인덱스. 없으면 L2/L3만 작동)
-REDIS_ENABLED=true
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=your-redis-password
+---
 
-# 로그
-LOG_DIR=/var/log/memento
+### graph_explore
+
+에러 파편을 기점으로 인과 관계 체인을 추적한다. RCA(Root Cause Analysis) 전용 도구. caused_by, resolved_by 관계를 1-hop 추적하여 에러의 원인과 해결 절차를 연결된 그래프로 반환한다.
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|---------|------|:----:|------|
+| startId | string | Y | 시작 파편 ID. error 타입 파편 권장 |
+| agentId | string | | 에이전트 ID |
+
+---
+
+## MemoryEvaluator: 잠들지 않는 검열관
+
+서버가 시작되면 MemoryEvaluator 워커가 백그라운드에서 구동된다. `getMemoryEvaluator().start()`로 시작되는 싱글턴이다. SIGTERM/SIGINT 수신 시 graceful shutdown 흐름에서 중지된다.
+
+워커는 5초 간격으로 Redis 큐 `memory_evaluation`을 폴링한다. 큐가 비어 있으면 대기한다. 큐에서 잡(job)을 꺼내면 Google Gemini Flash API를 호출하여 파편 내용의 합리성을 평가한다. 평가 결과는 fragments 테이블의 utility_score와 verified_at을 갱신하는 데 사용된다.
+
+새 파편이 remember로 저장될 때 평가 큐에 자동으로 투입된다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
+
+Gemini API 키가 설정되지 않은 경우 워커는 구동되지만 평가 작업을 건너뛴다.
+
+---
+
+## MemoryConsolidator: 기억의 정원사
+
+memory_consolidate 도구가 실행되거나 서버 내부 스케줄러가 트리거할 때 동작하는 10단계 유지보수 파이프라인이다.
+
+1. **hot → warm 강등**: 생성된 지 일정 시간이 경과한 hot 파편을 warm으로 이동
+2. **warm → cold 강등**: 오랫동안 접근되지 않은 warm 파편을 cold로 이동
+3. **cold 만료 삭제**: stale 임계값을 초과한 cold 파편 삭제. `is_anchor=true` 파편 제외
+4. **중요도 감쇠(decay)**: 접근 빈도가 낮고 utility_score가 낮은 파편의 importance 하향 조정. `is_anchor=true` 파편 제외
+5. **중복 병합**: content_hash가 동일한 파편들을 가장 오래된 것으로 병합. 링크와 접근 통계 통합
+6. **모순 탐지**: `contradicts` 관계로 연결된 파편 쌍을 감지하고 표시
+7. **고아 링크 정리**: 참조 파편이 삭제된 fragment_links 레코드 제거
+8. **utility_score 재계산**: access_count, accessed_at, importance를 종합하여 utility_score 갱신
+9. **임베딩 생성 큐 투입**: embedding이 NULL인 파편을 평가 큐에 추가하여 비동기 임베딩 생성 요청
+10. **요약 통계 반환**: 각 단계의 처리 건수를 집계하여 반환
+
+---
+
+## MEMORY_CONFIG: 기억 시스템의 조율판
+
+`config/memory.js`에 정의된 외부 설정 파일이다. 서버 코드를 수정하지 않고 이 파일만 편집하여 랭킹 가중치와 stale 임계값을 조정할 수 있다.
+
+```js
+export const MEMORY_CONFIG = {
+  ranking: {
+    importanceWeight   : 0.6,   // 복합 랭킹에서 중요도의 가중치
+    recencyWeight      : 0.4,   // 복합 랭킹에서 최신성의 가중치
+    activationThreshold: 100    // 이 수 이상의 파편이 있을 때 복합 랭킹 활성화
+  },
+  staleThresholds: {
+    procedure: 30,   // 절차 파편의 stale 기준 (일)
+    fact      : 60,  // 사실 파편의 stale 기준 (일)
+    decision  : 90,  // 결정 파편의 stale 기준 (일)
+    default   : 60   // 나머지 유형의 stale 기준 (일)
+  },
+  linkedFragmentLimit: 10  // recall의 includeLinks 시 1-hop 연결 파편 최대 수
+};
 ```
 
-`OPENAI_API_KEY`와 `REDIS_ENABLED`는 선택이다. 없으면 해당 레이어 없이 작동한다. L2만으로도 기본 기능은 쓸 수 있다.
+importanceWeight와 recencyWeight의 합은 1.0이어야 한다.
 
-### 2. PostgreSQL 스키마 초기화
+---
+
+## 환경 변수
+
+### 서버
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| PORT | 56332 | HTTP 리슨 포트 |
+| MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 시 인증 비활성화 |
+| SESSION_TTL_MINUTES | 60 | 세션 유효 시간 (분) |
+| LOG_DIR | /var/log/mcp | Winston 로그 파일 저장 디렉토리 |
+| ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 전체 허용 |
+
+### PostgreSQL
+
+POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용할 수 있다.
+
+| 변수 | 설명 |
+|------|------|
+| POSTGRES_HOST / DB_HOST | 호스트 주소 |
+| POSTGRES_PORT / DB_PORT | 포트 번호. 기본 5432 |
+| POSTGRES_DB / DB_NAME | 데이터베이스 이름 |
+| POSTGRES_USER / DB_USER | 접속 사용자 |
+| POSTGRES_PASSWORD / DB_PASSWORD | 접속 비밀번호 |
+| DB_MAX_CONNECTIONS | 연결 풀 최대 연결 수. 기본 20 |
+| DB_IDLE_TIMEOUT_MS | 유휴 연결 반환 대기 시간 ms. 기본 30000 |
+| DB_CONN_TIMEOUT_MS | 연결 획득 타임아웃 ms. 기본 10000 |
+| DB_QUERY_TIMEOUT | 쿼리 타임아웃 ms. 기본 30000 |
+
+### Redis
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| REDIS_ENABLED | false | Redis 활성화. false면 L1 검색과 캐싱이 비활성화 |
+| REDIS_SENTINEL_ENABLED | false | Sentinel 모드 사용 |
+| REDIS_HOST | localhost | Redis 서버 호스트 |
+| REDIS_PORT | 6379 | Redis 서버 포트 |
+| REDIS_PASSWORD | (없음) | Redis 인증 비밀번호 |
+| REDIS_DB | 0 | Redis 데이터베이스 번호 |
+| REDIS_MASTER_NAME | mymaster | Sentinel 마스터 이름 |
+| REDIS_SENTINELS | localhost:26379, localhost:26380, localhost:26381 | Sentinel 노드 목록. 쉼표로 구분된 host:port 형식 |
+
+### 캐싱
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| CACHE_ENABLED | REDIS_ENABLED 값과 동일 | 쿼리 결과 캐싱 활성화 |
+| CACHE_DB_TTL | 300 | DB 쿼리 결과 캐시 TTL (초) |
+| CACHE_SESSION_TTL | SESSION_TTL_MS / 1000 | 세션 캐시 TTL (초) |
+
+### AI
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| OPENAI_API_KEY | (없음) | OpenAI API 키. 임베딩 생성에 사용 |
+| EMBEDDING_MODEL | text-embedding-3-small | 사용할 임베딩 모델 |
+| EMBEDDING_DIMENSIONS | 1536 | 임베딩 벡터 차원 수. DB 스키마의 vector(1536)와 일치해야 한다 |
+| GEMINI_API_KEY | (없음) | Google Gemini API 키. MemoryEvaluator에서 사용 |
+
+---
+
+## HTTP 엔드포인트
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| POST | /mcp | Streamable HTTP. JSON-RPC 요청 수신. MCP-Session-Id 헤더 필요 (초기 initialize 제외) |
+| GET | /mcp | Streamable HTTP. SSE 스트림 열기. 서버 측 푸시용 |
+| DELETE | /mcp | Streamable HTTP. 세션 명시적 종료 |
+| GET | /sse | Legacy SSE. 세션 생성. `accessKey` 쿼리 파라미터로 인증 |
+| POST | /message?sessionId= | Legacy SSE. JSON-RPC 요청 수신. 응답은 SSE 스트림으로 전달 |
+| GET | /health | 헬스 체크. Redis 연결, DB 쿼리(SELECT 1), 세션 상태를 확인하고 JSON으로 반환 |
+| GET | /metrics | Prometheus 메트릭. prom-client가 수집한 HTTP 요청 카운터, 세션 게이지 등 |
+| GET | /.well-known/oauth-authorization-server | OAuth 2.0 인가 서버 메타데이터 |
+| GET | /.well-known/oauth-protected-resource | OAuth 2.0 보호 리소스 메타데이터 |
+| GET | /authorize | OAuth 2.0 인가 엔드포인트. PKCE code_challenge 필요 |
+| POST | /token | OAuth 2.0 토큰 엔드포인트. authorization_code 교환 |
+
+인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE는 `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터로 인증한다.
+
+---
+
+## 설치
 
 ```bash
-psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql -U postgres -d memento -f lib/memory/memory-schema.sql
-```
-
-### 3. 서버 실행
-
-```bash
+# 의존성 설치
 npm install
-npm start
+
+# PostgreSQL 스키마 적용
+psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
+
+# 서버 실행
+node server.js
 ```
 
-```
-Memento MCP HTTP server listening on port 56332
-Streamable HTTP endpoints: POST/GET/DELETE /mcp
-Legacy SSE endpoints: GET /sse, POST /message
-Authentication: ENABLED
-```
-
-### 4. MCP 클라이언트 설정
+Claude Code 연결 설정 예시 (`~/.claude/settings.json` 또는 프로젝트 `.claude/settings.json`):
 
 ```json
 {
   "mcpServers": {
     "memento": {
+      "type": "http",
       "url": "http://localhost:56332/mcp",
       "headers": {
-        "Authorization": "Bearer your-secret-key"
+        "Authorization": "Bearer YOUR_MEMENTO_ACCESS_KEY"
       }
     }
   }
 }
 ```
 
----
-
-## 기술 스택
-
-| 구성 요소 | 버전 | 역할 |
-|-----------|------|------|
-| Node.js | 20+ | 런타임 |
-| PostgreSQL | 14+ | 파편의 영구 거처 |
-| pgvector | 0.5+ | 의미의 공간 지도 (L3 시맨틱 검색) |
-| OpenAI Embedding API | text-embedding-3-small | 텍스트를 벡터 공간의 점으로 변환 |
-| Redis | 6+ | L1 역인덱스 + Hot Cache + Working Memory |
-| Gemini Flash | — | `memory_consolidate` 모순 탐지 |
-| MCP Protocol | 2025-11-25 | AI 클라이언트와 통신 |
+외부에서 접속할 때는 nginx 리버스 프록시를 통해 노출한다. 내부 IP나 내부 포트를 외부 문서에 직접 기재하지 않는다.
 
 ---
-
-## 인증
-
-모든 요청은 `MEMENTO_ACCESS_KEY`로 인증한다.
-
-```bash
-curl -H "Authorization: Bearer your-secret-key" \
-     http://localhost:56332/health
-
-curl -H "memento-access-key: your-secret-key" \
-     http://localhost:56332/mcp
-```
-
----
-
-## 엔드포인트
-
-| 메서드 | 경로 | 설명 |
-|--------|------|------|
-| `POST/GET/DELETE` | `/mcp` | Streamable HTTP (MCP 2025-11-25) |
-| `GET` | `/sse` | Legacy SSE |
-| `POST` | `/message` | Legacy SSE 메시지 |
-| `GET` | `/health` | 헬스 체크 |
-| `GET` | `/metrics` | Prometheus 메트릭 |
-
----
-
-## 마지막으로
 
 기억은 지능의 전제가 아니다. 기억은 지능의 조건이다. 체스를 두는 방법을 알아도, 어제 진 게임을 기억하지 못하면 같은 수를 또 둔다. 모든 언어를 구사해도, 어제 나눈 대화를 기억하지 못하면 매번 처음 만나는 사람이 된다. 수십억 개의 파라미터로 세상 모든 지식을 담아도, 당신과 함께한 어제를 기억하지 못하면 낯선 박식가일 뿐이다.
 
 기억이 있어야 관계가 있다. 관계가 있어야 신뢰가 있다.
 
-금붕어는 몇 달을 기억한다.
+기억은 사라지지 않는다. 다만 cold tier로 내려갈 뿐이다. 그리고 충분히 오래 방치된 cold 파편은 다음 consolidate 사이클에서 소멸한다. 이것은 설계이지 버그가 아니다. 쓸모없어진 기억은 자리를 비워야 한다. 아우구스티누스의 궁전에도 창고 정리는 필요하다.
+
+
+멍청한 걸로 유명한 금붕어새기도 몇 달을 기억한다.
 
 이제 당신의 AI도 그렇다.
 
