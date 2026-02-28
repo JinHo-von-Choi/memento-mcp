@@ -2,6 +2,12 @@
   <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
 </p>
 
+<p align="center">
+  <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
+    <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
+  </a>
+</p>
+
 # Memento MCP
 
 > 원래 다른 직접 만든 MCP의 보조기능이었는데 쓰다보니 ㄱㅊ한거 같아서 배포용으로 분리함.
@@ -76,7 +82,53 @@ MCP(Model Context Protocol) 기반의 AI 중장기 기억 시스템이다. AI가
 
 `preference`와 `error`는 절대 망각하지 않는다. 취향은 너가 누구인지를 정의하고, 에러 패턴은 언제 다시 만날지 모르기 때문이다.
 
-![지식 네트워크](assets/images/knowledge-graph.png)
+---
+
+## 데이터베이스 스키마: 파편들이 잠드는 공간
+
+스키마명은 `agent_memory`다.
+
+```mermaid
+erDiagram
+    fragments ||--o{ fragment_links : "from/to"
+    fragments {
+        text id PK
+        text content
+        text topic
+        text type
+        real importance
+        text agent_id
+        vector embedding
+    }
+    fragment_links {
+        bigserial id PK
+        text from_id FK
+        text to_id FK
+        text relation_type
+    }
+```
+
+- **fragments**: 모든 기억의 원자 단위 (300자 이내)
+- **fragment_links**: 파편 간의 인과/해결/구성 관계망
+- **tool_feedback**: 도구 사용 결과에 대한 유용성 피드백
+- **task_feedback**: 세션 전체의 작업 성공 여부 기록
+
+---
+
+## 프롬프트 & 리소스: AI의 조력자
+
+AI가 시스템을 더 잘 이해하고 활용할 수 있도록 돕는다.
+
+### 프롬프트 (Prompts)
+- `analyze-session`: 현재 대화에서 중요한 정보를 추출하도록 유도
+- `retrieve-relevant-memory`: 특정 주제에 대한 입체적 검색 가이드
+- `onboarding`: AI가 시스템 사용법을 스스로 학습
+
+### 리소스 (Resources)
+- `memory://stats`: 시스템 전체 통계 정보
+- `memory://topics`: 저장된 주제 레이블 목록
+- `memory://config`: 시스템 가중치 및 설정
+- `memory://active-session`: 현재 세션의 활동 로그
 
 ---
 

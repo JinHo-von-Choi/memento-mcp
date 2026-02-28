@@ -2,6 +2,12 @@
   <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
 </p>
 
+<p align="center">
+  <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
+    <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
+  </a>
+</p>
+
 # Memento MCP: A Fragment-Based Persistent Memory Subsystem for Stateless Language Model Agents
 
 ---
@@ -165,6 +171,45 @@ External configuration: `config/memory.js` exports `MEMORY_CONFIG`, a module-lev
 
 All persistent state resides in PostgreSQL under the `agent_memory` schema. The DDL is defined in `lib/memory/memory-schema.sql`.
 
+```mermaid
+erDiagram
+    fragments ||--o{ fragment_links : "from/to"
+    fragments ||--o{ fragment_versions : "history"
+    fragments {
+        text id PK
+        text content "PII Masked"
+        text topic
+        text_array keywords
+        text type "fact/decision/error..."
+        real importance
+        text content_hash "Unique"
+        text_array linked_to
+        text agent_id "RLS Key"
+        integer access_count
+        real utility_score
+        vector embedding "OpenAI 1536"
+        boolean is_anchor
+    }
+    fragment_links {
+        bigserial id PK
+        text from_id FK
+        text to_id FK
+        text relation_type
+    }
+    tool_feedback {
+        bigserial id PK
+        text tool_name
+        boolean relevant
+        boolean sufficient
+        text session_id
+    }
+    task_feedback {
+        bigserial id PK
+        text session_id
+        boolean overall_success
+    }
+```
+
 ### 3.1 The `fragments` Table
 
 The central relation. Each row represents one atomic unit of agent knowledge.
@@ -270,9 +315,34 @@ The `default` namespace is an intentional design decision for shared cross-agent
 
 ---
 
-## 4. Retrieval Architecture: The Three-Tier Cascade
+## 4. Prompts: Operational Guidance for AI
 
-### 4.1 Retrieval Flow Diagram
+Prompts are pre-defined guidelines that help the AI use the memory system more effectively.
+
+| Name | Description | Key Role |
+|------|-------------|----------|
+| `analyze-session` | Analyze session activity | Guide the AI to extract and store valuable decisions, errors, and procedures from the current conversation. |
+| `retrieve-relevant-memory` | Memory retrieval guide | Assist in finding optimal context by combining keyword and semantic search for a specific topic. |
+| `onboarding` | System onboarding | Self-guide for the AI to learn when and how to use Memento MCP tools. |
+
+---
+
+## 5. Resources: A Window into System State
+
+Resources allow the AI to retrieve real-time state information of the memory system and include it in the context.
+
+| URI | Description | Data Source |
+|-----|-------------|-------------|
+| `memory://stats` | System Statistics | Counts by type/tier and average utility scores from the `fragments` table. |
+| `memory://topics` | Topic List | List of all unique `topic` labels in the `fragments` table. |
+| `memory://config` | System Configuration | Weights and TTL thresholds defined in `MEMORY_CONFIG`. |
+| `memory://active-session` | Session Activity Log | Tool invocation history for the current session from `SessionActivityTracker` (Redis). |
+
+---
+
+## 6. Retrieval Architecture: The Three-Tier Cascade
+
+### 6.1 Retrieval Flow Diagram
 
 ![Retrieval Flow](assets/images/retrieval.png)
 

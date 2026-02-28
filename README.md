@@ -2,6 +2,12 @@
   <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
 </p>
 
+<p align="center">
+  <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
+    <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
+  </a>
+</p>
+
 # Memento MCP
 
 ## 기억론 소고: 망각하는 기계에게 보내는 편지
@@ -106,6 +112,45 @@ lib/tools/
 
 스키마명은 `agent_memory`다. 다섯 개의 테이블이 기억의 구조를 형성한다. 스키마 파일은 `lib/memory/memory-schema.sql`이다.
 
+```mermaid
+erDiagram
+    fragments ||--o{ fragment_links : "from/to"
+    fragments ||--o{ fragment_versions : "history"
+    fragments {
+        text id PK
+        text content "PII Masked"
+        text topic
+        text_array keywords
+        text type "fact/decision/error..."
+        real importance
+        text content_hash "Unique"
+        text_array linked_to
+        text agent_id "RLS Key"
+        integer access_count
+        real utility_score
+        vector embedding "OpenAI 1536"
+        boolean is_anchor
+    }
+    fragment_links {
+        bigserial id PK
+        text from_id FK
+        text to_id FK
+        text relation_type
+    }
+    tool_feedback {
+        bigserial id PK
+        text tool_name
+        boolean relevant
+        boolean sufficient
+        text session_id
+    }
+    task_feedback {
+        bigserial id PK
+        text session_id
+        boolean overall_success
+    }
+```
+
 ### fragments
 
 모든 기억의 원자 단위. 이 테이블 하나가 시스템의 심장이다.
@@ -209,6 +254,31 @@ CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
 ```
 
 에이전트 ID가 일치하는 파편, `default` 에이전트의 파편(공용 데이터), `system`/`admin` 세션(유지보수용)에만 접근이 허용된다. 도구 핸들러는 쿼리 실행 직전 `SET LOCAL app.current_agent_id = $1`로 컨텍스트를 설정한다.
+
+---
+
+## 프롬프트 (Prompts): AI의 작업 지침서
+
+프롬프트는 AI가 기억 시스템을 더 효율적으로 사용할 수 있도록 돕는 미리 정의된 가이드라인이다.
+
+| 이름 | 설명 | 주요 역할 |
+|------|------|----------|
+| `analyze-session` | 세션 활동 분석 | 현재 대화에서 저장할 가치가 있는 결정, 에러, 절차를 자동으로 추출하도록 유도 |
+| `retrieve-relevant-memory` | 관련 기억 검색 가이드 | 특정 주제에 대해 키워드와 시맨틱 검색을 병행하여 최적의 컨텍스트를 찾도록 보조 |
+| `onboarding` | 시스템 사용법 안내 | AI가 Memento MCP의 도구들을 언제 어떻게 써야 하는지 스스로 학습 |
+
+---
+
+## 리소스 (Resources): 시스템 상태의 창(Window)
+
+리소스를 통해 AI는 기억 시스템의 현재 상태를 실시간으로 조회하고 컨텍스트에 반영할 수 있다.
+
+| URI | 설명 | 데이터 소스 |
+|-----|------|------------|
+| `memory://stats` | 시스템 통계 | `fragments` 테이블의 유형별, 계층별 카운트 및 유용성 점수 평균 |
+| `memory://topics` | 주제 목록 | `fragments` 테이블의 모든 고유한 `topic` 레이블 목록 |
+| `memory://config` | 시스템 설정 | `MEMORY_CONFIG`에 정의된 가중치 및 TTL 임계값 |
+| `memory://active-session` | 세션 활동 로그 | `SessionActivityTracker`(Redis)에 기록된 현재 세션의 도구 사용 이력 |
 
 ---
 
