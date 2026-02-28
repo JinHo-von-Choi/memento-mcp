@@ -59,6 +59,7 @@ import { jsonRpcError, dispatchJsonRpc } from "./lib/jsonrpc.js";
 import { saveAccessStats } from "./lib/tools/index.js";
 import { shutdownPool, getPoolStats, getPrimaryPool } from "./lib/tools/db.js";
 import { redisClient } from "./lib/redis.js";
+import { getMemoryEvaluator } from "./lib/memory/MemoryEvaluator.js";
 
 /**
  * HTTP 서버
@@ -199,6 +200,11 @@ const server               = http.createServer(async (req, res) => {
         "then include the returned MCP-Session-Id header in subsequent requests."
       ), req);
       return;
+    }
+
+    /** tools/call 요청에 _sessionId 주입 (SessionActivityTracker용) */
+    if (msg.method === "tools/call" && msg.params?.arguments) {
+      msg.params.arguments._sessionId = sessionId;
     }
 
     const { kind, response }  = await dispatchJsonRpc(msg);
@@ -371,6 +377,11 @@ const server               = http.createServer(async (req, res) => {
       return;
     }
 
+    /** tools/call 요청에 _sessionId 주입 (SessionActivityTracker용) */
+    if (msg.method === "tools/call" && msg.params?.arguments) {
+      msg.params.arguments._sessionId = sessionId;
+    }
+
     const { kind, response }  = await dispatchJsonRpc(msg);
 
     if (kind === "ok" || kind === "error") {
@@ -532,6 +543,18 @@ server.listen(PORT, () => {
 
   setInterval(() => saveAccessStats(LOG_DIR), 10 * 60 * 1000);
   console.log("Access stats: Saving every 10 minutes");
+
+  /** Phase 2: 비동기 지식 품질 평가 워커 시작 */
+  getMemoryEvaluator().start().catch(err => {
+    console.error("[Startup] Failed to start MemoryEvaluator:", err.message);
+  });
+
+  /** NLI 모델 사전 로드 (cold start 방지, 비차단) */
+  import("./lib/memory/NLIClassifier.js")
+    .then(m => m.preloadNLI())
+    .catch(err => {
+      console.warn("[Startup] NLI preload skipped:", err.message);
+    });
 });
 
 /**
@@ -545,14 +568,17 @@ async function gracefulShutdown(signal) {
     console.log("[Shutdown] HTTP server closed");
   });
 
-  // 세션 정리
-  console.log("[Shutdown] Closing all sessions...");
+  // 세션 정리 (autoReflect 포함)
+  console.log("[Shutdown] Closing all sessions (with auto-reflect)...");
   for (const sessionId of streamableSessions.keys()) {
     await closeStreamableSession(sessionId);
   }
   for (const sessionId of legacySseSessions.keys()) {
-    closeLegacySseSession(sessionId);
+    await closeLegacySseSession(sessionId);
   }
+
+  // Phase 2: 워커 중지
+  getMemoryEvaluator().stop();
 
   // DB 연결 풀 종료
   await shutdownPool();

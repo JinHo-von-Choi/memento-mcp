@@ -6,7 +6,7 @@
 
 Contemporary large language model deployments operate under a fundamental architectural constraint: the absence of persistent cross-session state. Each invocation constitutes an epistemically isolated event; context established during one session cannot be recovered in subsequent interactions without explicit external persistence mechanisms. This constraint renders agents incapable of accumulating operational knowledge, tracking error resolution histories, or maintaining user-specific behavioral preferences across session boundaries.
 
-We present **Memento MCP**, a persistent memory subsystem implementing the Model Context Protocol (MCP) specification. The system decomposes agent knowledge into discrete, typed *fragments* — atomic units of information semantically classified into six epistemic categories: `fact`, `decision`, `error`, `preference`, `procedure`, and `relation`. Fragment retrieval is implemented as a three-tier cascading search over Redis Set intersection (L1), PostgreSQL GIN-indexed array queries (L2), and pgvector HNSW approximate nearest-neighbor search (L3), with composite ranking over importance and recency dimensions. A background evaluation worker invokes the Google Gemini Flash API to assess stored fragment utility asynchronously. A ten-stage consolidation pipeline manages TTL tier transitions, importance decay, deduplication, and contradiction detection. Row-Level Security at the PostgreSQL layer enforces agent-scoped isolation without application-layer filtering overhead.
+We present **Memento MCP**, a persistent memory subsystem implementing the Model Context Protocol (MCP) specification. The system decomposes agent knowledge into discrete, typed *fragments* — atomic units of information semantically classified into six epistemic categories: `fact`, `decision`, `error`, `preference`, `procedure`, and `relation`. Fragment retrieval is implemented as a three-tier cascading search over Redis Set intersection (L1), PostgreSQL GIN-indexed array queries (L2), and pgvector HNSW approximate nearest-neighbor search (L3), with composite ranking over importance and recency dimensions. A background evaluation worker invokes the Google Gemini CLI to assess stored fragment utility asynchronously. An eleven-stage consolidation pipeline manages TTL tier transitions, importance decay, deduplication, and contradiction detection — the latter implemented as a three-stage hybrid of pgvector similarity filtering, NLI (Natural Language Inference) classification via a local mDeBERTa ONNX model, and Gemini CLI escalation for ambiguous cases. Session termination triggers automatic reflection that converts session activity into structured fragments. The `remember` operation proactively creates typed edges to semantically related fragments via direct pgvector cosine similarity queries. Row-Level Security at the PostgreSQL layer enforces agent-scoped isolation without application-layer filtering overhead.
 
 The server exposes eleven MCP tools, supports protocol versions 2024-11-05 through 2025-11-25, implements both Streamable HTTP and Legacy SSE transports, and provides OAuth 2.0 PKCE authentication. Default listening port is 56332.
 
@@ -22,7 +22,7 @@ The server exposes eleven MCP tools, supports protocol versions 2024-11-05 throu
 5. Fragment Lifecycle: TTL Model and Scope Semantics
 6. MCP Tool Interface
 7. Asynchronous Quality Evaluation: MemoryEvaluator
-8. Consolidation Pipeline: MemoryConsolidator
+8. Consolidation Pipeline: MemoryConsolidator (11-stage, NLI + Gemini CLI hybrid)
 9. Fault Tolerance and Degradation Behavior
 10. Configuration
 11. Deployment
@@ -78,11 +78,16 @@ The system decomposes into three structural layers: the HTTP transport layer, th
                              │              Background Workers       │
                ┌─────────────┴──────┐   ┌────────────────────────┐  │
                │       Redis        │   │   MemoryEvaluator      │  │
-               │  L1 keyword Sets   │   │   (Gemini Flash API)   │  │
+               │  L1 keyword Sets   │   │   (Gemini CLI)         │  │
                │  Working Memory    │   │   5s polling queue     │  │
                │  Evaluation queue  │   ├────────────────────────┤  │
-               └────────────────────┘   │   MemoryConsolidator   ├──┘
-                                        │   10-stage pipeline    │
+               │  Session Activity  │   │   MemoryConsolidator   ├──┘
+               └────────────────────┘   │   11-stage pipeline    │
+                                        │   NLI + Gemini hybrid  │
+               ┌────────────────────┐   ├────────────────────────┤
+               │   NLI Classifier   │   │   AutoReflect          │
+               │  mDeBERTa ONNX CPU │───│   Session close hook   │
+               └────────────────────┘   └────────────────────────┘
                ┌────────────────────────┴────────────────────────┐
                │         PostgreSQL  (agent_memory schema)        │
                │  fragments (pgvector HNSW + GIN + RLS)          │
@@ -121,8 +126,11 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 | `FragmentStore.js` | PostgreSQL CRUD operations; Redis L1 index synchronization on write. |
 | `FragmentSearch.js` | Three-tier retrieval cascade orchestration (L1 → L2 → L3). |
 | `FragmentIndex.js` | Redis L1 index management (Set operations per keyword). |
-| `MemoryConsolidator.js` | Ten-stage lifecycle maintenance pipeline. |
-| `MemoryEvaluator.js` | Asynchronous Gemini Flash quality assessment worker. Singleton. |
+| `MemoryConsolidator.js` | Eleven-stage lifecycle maintenance pipeline (NLI + Gemini CLI hybrid contradiction detection). |
+| `MemoryEvaluator.js` | Asynchronous Gemini CLI quality assessment worker. Singleton. |
+| `NLIClassifier.js` | Natural Language Inference classifier (mDeBERTa ONNX, CPU-only). Entailment/contradiction/neutral labeling for contradiction detection Stage 2. |
+| `SessionActivityTracker.js` | Per-session tool call and fragment activity tracking (Redis Hash). TTL 24h. |
+| `AutoReflect.js` | Automatic `reflect` orchestrator triggered on session termination. Gemini CLI summary with minimal fallback. |
 | `memory-schema.sql` | PostgreSQL DDL for the `agent_memory` schema. |
 
 Supporting infrastructure modules:
@@ -132,9 +140,9 @@ Supporting infrastructure modules:
 | `lib/config.js` | Environment variable binding and typed constant export |
 | `lib/auth.js` | Bearer token verification |
 | `lib/oauth.js` | OAuth 2.0 PKCE authorization and token endpoint logic |
-| `lib/sessions.js` | Session lifecycle management for both transport types |
+| `lib/sessions.js` | Session lifecycle management for both transport types; async auto-reflect on close |
 | `lib/redis.js` | `ioredis` client initialization with optional Sentinel support |
-| `lib/gemini.js` | Google Gemini API client |
+| `lib/gemini.js` | Google Gemini API/CLI client (CLI preferred when available) |
 | `lib/compression.js` | Response compression (gzip / deflate) |
 | `lib/metrics.js` | Prometheus metric collectors (`prom-client`) |
 | `lib/logger.js` | Winston structured logger with daily log rotation |
@@ -348,7 +356,8 @@ No empirical benchmarks have been published for this deployment. The estimates b
 | L3 embedding generation | network-bound | 50–200 ms | OpenAI Embeddings API round-trip |
 | Full cascade (L1 → L3, cached embedding) | — | 5–20 ms | Merge + composite ranking: O(m log m), m = merged result count |
 | Full cascade (live embedding) | — | 60–220 ms | Dominated by OpenAI API call |
-| MemoryEvaluator job | network-bound | 200–1000 ms | Gemini Flash API round-trip; fully asynchronous, non-blocking |
+| MemoryEvaluator job | process-bound | 200–2000 ms | Gemini CLI subprocess; fully asynchronous, non-blocking |
+| NLI inference (warm) | O(n) | 50–200 ms | mDeBERTa ONNX CPU; n = token count of input pair |
 | Consolidation pipeline (< 10⁴ fragments) | O(n) most stages | < 1 s excl. API calls | Stage 9 embedding backfill bounded by OpenAI call count |
 
 Three further observations merit attention. First, the HNSW index parameters (m=16, ef_construction=64) represent a conservative default; increasing `ef_construction` at build time improves recall at the cost of index size and construction latency. The query-time recall parameter `ef` can be tuned per-request via pgvector's `SET hnsw.ef_search`. Second, composite ranking (§4.4) is activated only when the fragment store exceeds `MEMORY_CONFIG.ranking.activationThreshold` (default: 100); below this threshold, results are returned in creation-descending order, eliminating the sort cost entirely. Third, the token budget enforcement loop is O(k) in the number of returned fragments k, not in total store cardinality n, and contributes negligible latency at typical retrieval set sizes.
@@ -408,22 +417,27 @@ The eleven tools form three functional clusters:
 
 **Retrieval cluster:** `recall` executes the three-tier cascade; `context` loads session-initialization memory; `graph_explore` traverses causal chains from an error fragment.
 
-**Maintenance and telemetry cluster:** `reflect` converts a session summary to a fragment set at session close; `tool_feedback` records instrument-level utility assessments; `memory_stats` returns aggregate store statistics; `memory_consolidate` triggers the ten-stage maintenance pipeline.
+**Maintenance and telemetry cluster:** `reflect` converts a session summary to a fragment set at session close (also triggered automatically on session termination via `AutoReflect`); `tool_feedback` records instrument-level utility assessments; `memory_stats` returns aggregate store statistics; `memory_consolidate` triggers the eleven-stage maintenance pipeline.
 
 A canonical session workflow:
 
 ```
 session open    → context(agentId, tokenBudget)
                   [loads preference + error + procedure fragments]
+                  [hints about unreflected prior sessions, if any]
 
 during session  → recall(keywords/text)
                   remember(content, topic, type)
+                    └─ auto-link: pgvector similarity scan creates
+                       related / resolved_by / superseded_by edges
                   link(fromId, toId, relationType)
                   amend(id, ...) as knowledge evolves
                   tool_feedback(tool_name, relevant, sufficient)
 
 session close   → reflect(summary, decisions, errors_resolved, ...)
                   [converts summary to typed fragments for next session]
+                  (or) AutoReflect triggers if agent does not call reflect
+                    └─ Gemini CLI summary, or minimal fallback
 ```
 
 ### 6.2 `remember`
@@ -453,6 +467,8 @@ Keyword extraction, when `keywords` is omitted, applies a term-frequency ranking
 | `agentId` | string | | Agent identifier for RLS context. Defaults to `"default"` namespace when omitted. |
 
 Returns: `{ success: true, id: string, created: boolean }`. `created: false` indicates the content hash already existed; the existing fragment is returned.
+
+**Auto-linking behavior:** After successful insertion, `MemoryManager._autoLinkOnRemember` queries pgvector directly for fragments in the same topic with cosine similarity > 0.7. Up to three edges are created automatically: `related` (similarity > 0.7), `resolved_by` (new error fragment resolving a prior error), or `superseded_by` (same type, similarity > 0.85, newer timestamp). This operates only when embeddings are present; fragments without embeddings are skipped. The auto-link step is non-blocking: failures do not affect the `remember` response.
 
 ### 6.3 `recall`
 
@@ -512,6 +528,8 @@ Modifies a fragment in place. Pre-modification state is archived to `fragment_ve
 
 Converts a session summary into a structured fragment set at session termination. Each non-null list parameter generates typed fragments: `decisions` → `decision`; `errors_resolved` → `error`; `new_procedures` → `procedure`; `open_questions` → `fact`. The `summary` string is always persisted as a `fact` fragment.
 
+**Automatic reflection:** When a session terminates (explicit close, expiration, or server shutdown) without the agent having called `reflect`, the `AutoReflect` module triggers automatically. If Gemini CLI is available, it generates a structured summary from `SessionActivityTracker` logs (tools called, keywords searched, fragments created/accessed) and invokes `reflect` with the synthesized parameters. If Gemini CLI is unavailable, a minimal `fact` fragment summarizing the session is created, and the session is marked as "unreflected" for potential future AI-driven reflection. The `context` tool detects unreflected sessions and injects a hint into the AI's prompt.
+
 | Parameter | Type | Required | Description |
 |-----------|------|:--------:|-------------|
 | `summary` | string | Y | Free-text session summary |
@@ -525,7 +543,7 @@ Converts a session summary into a structured fragment set at session termination
 
 ### 6.8 `context`
 
-Loads memory context at session initialization. Returns Core Memory (high-importance fragments, prefix-injected) and, when `sessionId` is specified, Working Memory (session-scoped fragments appended during the current session).
+Loads memory context at session initialization. Returns Core Memory (high-importance fragments, prefix-injected) and, when `sessionId` is specified, Working Memory (session-scoped fragments appended during the current session). Additionally queries `SessionActivityTracker` for unreflected prior sessions and, when found, injects a hint into the returned context prompting the AI to call `reflect` for those sessions.
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
@@ -554,7 +572,7 @@ Returns aggregate statistics: total fragment count, TTL tier distribution, type-
 
 ### 6.11 `memory_consolidate`
 
-Triggers the ten-stage consolidation pipeline synchronously. Returns per-stage processing counts. No parameters. See §8.
+Triggers the eleven-stage consolidation pipeline synchronously. Returns per-stage processing counts including NLI statistics (`nliResolvedDirectly`, `nliSkippedAsNonContra`). No parameters. See §8.
 
 ### 6.12 `graph_explore`
 
@@ -580,41 +598,58 @@ server start
                     ├── popFromQueue("memory_evaluation")
                     │       │ job present
                     │       └──► evaluate(job)
-                    │               ├── Gemini Flash API call
+                    │               ├── Gemini CLI call (geminiCLIJson)
                     │               └── UPDATE fragments SET utility_score, verified_at
                     │       │ queue empty
                     │       └──► sleep(5000ms)
                     └── (repeat)
 ```
 
-When a fragment is persisted via `remember`, its identifier is enqueued for evaluation. The evaluation path is fully decoupled from the `remember` call to eliminate API latency from the synchronous response path. `MemoryEvaluator` assesses informational value, specificity, and actionability of the stored content and updates `utility_score` and `verified_at` accordingly.
+When a fragment is persisted via `remember`, its identifier is enqueued for evaluation. The evaluation path is fully decoupled from the `remember` call to eliminate latency from the synchronous response path. `MemoryEvaluator` assesses informational value, specificity, and actionability of the stored content and updates `utility_score` and `verified_at` accordingly.
 
-When `GEMINI_API_KEY` is absent or the API call fails (network error, rate limit exceeded, quota exhaustion), the job is processed without updating the fragment — no error is surfaced to the caller and the worker continues. The fragment remains accessible with its default `utility_score`. The queue is not retried automatically on transient failures in the current implementation; operators requiring retry semantics should instrument the Redis queue externally.
+The evaluator uses the Gemini CLI (`geminiCLIJson`) rather than the Gemini REST API. If the CLI is not installed (`isGeminiCLIAvailable()` returns `false`), evaluation is skipped entirely — the fragment retains its default `utility_score` of 1.0, and no error is surfaced. When the CLI call fails (timeout, malformed response), the job is processed without updating the fragment and the worker continues. The queue is not retried automatically on transient failures in the current implementation; operators requiring retry semantics should instrument the Redis queue externally.
 
 ---
 
 ## 8. Consolidation Pipeline: MemoryConsolidator
 
-The consolidation pipeline is a ten-stage sequential maintenance procedure.
+The consolidation pipeline is an eleven-stage sequential maintenance procedure.
 
 ```
 memory_consolidate
         │
-        ├── Stage 1:  hot → warm demotion (age threshold, anchors exempt)
-        ├── Stage 2:  warm → cold demotion (inactivity threshold, anchors exempt)
-        ├── Stage 3:  cold expiration (stale threshold, anchors exempt)
-        ├── Stage 4:  importance decay (low access_count + low utility_score, anchors exempt)
-        ├── Stage 5:  deduplication (content_hash collision → merge, retain oldest)
-        ├── Stage 6:  contradiction detection (contradicts edges → flag, no auto-resolve)
-        ├── Stage 7:  orphan link pruning (dangling fragment_links after prior deletions)
-        ├── Stage 8:  utility_score recomputation (access_count × recency × importance)
-        ├── Stage 9:  embedding backfill enqueue (embedding IS NULL → memory_evaluation queue)
+        ├── Stage 1:  TTL tier transitions (hot→warm→cold, anchors exempt)
+        ├── Stage 2:  importance decay (multiplicative, anchors exempt)
+        ├── Stage 3:  expired fragment deletion (stale thresholds)
+        ├── Stage 4:  deduplication (content_hash collision → merge, retain highest-importance)
+        ├── Stage 5:  missing embedding backfill (up to 5 per cycle)
+        ├── Stage 6:  utility_score recomputation: importance × (1 + ln(max(access_count, 1)))
+        ├── Stage 6.5: anchor auto-promotion (access_count ≥ 10 + importance ≥ 0.8)
+        ├── Stage 7:  contradiction detection ──── 3-stage hybrid ────
+        │                 ├─ 7a: pgvector cosine similarity > 0.85 (candidate filter)
+        │                 ├─ 7b: NLI classification (mDeBERTa ONNX, CPU)
+        │                 │       ├─ contradiction ≥ 0.8 → resolve immediately
+        │                 │       ├─ entailment ≥ 0.6 → skip (not contradictory)
+        │                 │       └─ uncertain → escalate to Stage 7c
+        │                 └─ 7c: Gemini CLI adjudication (domain/numerical contradictions)
+        │                         └─ CLI unavailable → queue to Redis pending list
+        ├── Stage 7.5: pending contradiction reprocessing (Redis queue, max 10 per cycle)
+        ├── Stage 8:  feedback report generation (tool_feedback/task_feedback aggregation)
+        ├── Stage 9:  Redis index pruning + stale fragment collection
         └── Stage 10: aggregate statistics (per-stage counts → return value)
 ```
 
-**Stage 5 — Deduplication detail:** When multiple fragments share a `content_hash`, the earliest-created fragment is designated the surviving record. `access_count` values from all duplicate records are summed and assigned to the survivor. All `fragment_links` referencing duplicate fragment IDs are updated to reference the surviving ID before the duplicates are deleted.
+**Stage 4 — Deduplication detail:** When multiple fragments share a `content_hash`, the highest-importance fragment is designated the surviving record. All `fragment_links` referencing duplicate fragment IDs are updated to reference the surviving ID before the duplicates are deleted.
 
-**Stage 6 — Contradiction detection detail:** The stage identifies all `fragment_links` rows with `relation_type = 'contradicts'` and returns the pairs for operator review. No automatic resolution or deletion is performed; resolution is a semantic judgment that the system does not presume to make autonomously.
+**Stage 7 — Contradiction detection detail (3-stage hybrid):**
+
+The contradiction detection pipeline processes only fragments created since the last check (tracked via Redis key `frag:contradiction_check_at`). For each new fragment, candidates are retrieved from the same topic with pgvector cosine similarity > 0.85 (Stage 7a).
+
+Stage 7b applies the NLI classifier (`NLIClassifier.js`) to each candidate pair. The mDeBERTa model produces entailment/contradiction/neutral probabilities in ~50-200ms on CPU. High-confidence contradictions (score >= 0.8) are resolved immediately without an LLM call — this handles clear logical contradictions such as "the server never restarts" vs. "the server restarts daily." Clear entailments (score >= 0.6) are skipped as non-contradictory. This stage typically eliminates 50-70% of candidate pairs from requiring LLM evaluation.
+
+Stage 7c escalates NLI-uncertain cases to Gemini CLI for contextual adjudication. This handles numerical contradictions (e.g., "TTL is 3600s" vs. "TTL is 300s") and domain-specific conflicts that NLI models cannot reason about. When Gemini CLI is unavailable, pairs with similarity > 0.92 are queued to Redis (`frag:pending_contradictions`) for later reprocessing in Stage 7.5.
+
+Confirmed contradictions trigger: (1) a `contradicts` edge in `fragment_links`; (2) a `superseded_by` edge from the older to the newer fragment; (3) importance halving of the older fragment (anchors exempt). The timestamp is updated only for successfully processed fragments, ensuring failed Gemini calls do not cause fragments to be skipped in subsequent cycles.
 
 ---
 
@@ -642,11 +677,21 @@ When embedding generation fails (network error, invalid API key, rate limit, quo
 - L1 and L2 retrieval continue to function normally.
 - No error is surfaced to the `remember` caller; the operation is reported as successful.
 
-### 9.4 Gemini API Failure
+### 9.4 Gemini CLI Unavailability
 
-Failures in `MemoryEvaluator`'s Gemini API calls result in the evaluation job being dropped without retry. The fragment retains its initial `utility_score` of 1.0. The worker logs the error and resumes the polling loop without interruption.
+When the Gemini CLI is not installed or fails:
+- **MemoryEvaluator** skips evaluation entirely; the fragment retains its initial `utility_score` of 1.0.
+- **Contradiction detection** falls back to NLI-only mode. High-confidence NLI contradictions are still resolved; uncertain cases with similarity > 0.92 are queued to Redis pending list for later reprocessing when the CLI becomes available.
+- **AutoReflect** creates a minimal `fact` fragment summarizing session activity and marks the session as "unreflected" rather than generating a full structured summary.
 
-### 9.5 Token Encoder Unavailability
+### 9.5 NLI Model Unavailability
+
+When the NLI model (`NLIClassifier.js`) fails to load (download failure, ONNX runtime error, memory constraint):
+- Contradiction detection falls back to the pre-NLI behavior: all candidate pairs are sent directly to Gemini CLI, or queued to Redis pending list when CLI is also unavailable.
+- The model load failure is cached; subsequent calls return `null` immediately without retry. Server restart is required to re-attempt model loading.
+- All other system functionality is unaffected.
+
+### 9.6 Token Encoder Unavailability
 
 If `js-tiktoken` fails to initialize the `cl100k_base` encoder at runtime, `FragmentFactory` falls back to a `Math.ceil(text.length / 4)` character-based approximation. This approximation overestimates token count for CJK-heavy content and underestimates for heavily punctuated ASCII. Operators storing predominantly Korean or Chinese content should ensure the encoder initializes correctly to avoid systematic `tokenBudget` miscalculation.
 
@@ -731,10 +776,14 @@ export const MEMORY_CONFIG = {
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | (empty) | OpenAI API key for embedding generation. L3 retrieval unavailable when absent. |
+| `OPENAI_API_KEY` | (empty) | OpenAI API key for embedding generation. L3 retrieval and auto-linking unavailable when absent. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model identifier |
 | `EMBEDDING_DIMENSIONS` | `1536` | Embedding dimensionality. Must match `vector(N)` in the schema. |
-| `GEMINI_API_KEY` | (empty) | Google Gemini API key for MemoryEvaluator. Evaluation skipped when absent. |
+| `GEMINI_API_KEY` | (empty) | Google Gemini API key for legacy API mode. Gemini CLI is preferred when installed; this key is used as fallback. |
+
+**NLI model:** The NLI classifier (`@huggingface/transformers` + ONNX Runtime) requires no API key. The mDeBERTa model (~280MB ONNX) is downloaded automatically on first use and cached locally. No GPU is required; inference runs on CPU via ONNX Runtime.
+
+**Gemini CLI:** When the `gemini` CLI is installed and available on `$PATH`, it is used in preference to the REST API for all Gemini operations (fragment evaluation, contradiction adjudication, auto-reflect summary generation). Install via `npm install -g @anthropic/gemini-cli` or the platform-specific package manager.
 
 ---
 
@@ -761,7 +810,9 @@ npm install
 node server.js
 ```
 
-On startup, the server logs the listening port, authentication status, session TTL, and confirms `MemoryEvaluator` worker initialization. Graceful shutdown on `SIGTERM` / `SIGINT` closes active sessions, stops `MemoryEvaluator`, drains the PostgreSQL connection pool, and flushes access statistics.
+On startup, the server logs the listening port, authentication status, session TTL, confirms `MemoryEvaluator` worker initialization, and begins NLI model preloading in the background (~30s on first download, ~1-2s from cache). Graceful shutdown on `SIGTERM` / `SIGINT` triggers `AutoReflect` for all active sessions, stops `MemoryEvaluator`, drains the PostgreSQL connection pool, and flushes access statistics.
+
+**Note on ONNX Runtime and CUDA:** On systems with CUDA 11 installed, `npm install` may fail during `onnxruntime-node` post-install. Use `npm install --onnxruntime-node-install-cuda=skip` to force CPU-only mode. This project does not require GPU acceleration.
 
 ### 11.3 MCP Client Configuration
 

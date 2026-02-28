@@ -10,9 +10,13 @@ Memento MCP는 그 망각에 반대한다.
 
 이 서버는 에이전트의 장기 기억을 관리하는 Fragment-Based Memory MCP Server다. 설계의 핵심 전제는 하나다. 지식은 단일한 덩어리로 저장되어서는 안 된다. 지식은 원자적 파편(fragment)으로 분해되어야 하며, 각 파편은 독립적으로 검색 가능하고, 다른 파편들과 명시적 관계를 맺을 수 있어야 한다. 인간의 기억이 에피소드 기억, 의미 기억, 절차 기억으로 분리되어 있듯이 — 이 시스템의 파편은 fact, decision, error, preference, procedure, relation이라는 여섯 유형으로 분류된다.
 
+왜 파편인가. 세션 요약을 통째로 저장하면 두 가지 문제가 생긴다. 첫째, 관련 없는 내용까지 컨텍스트 창에 밀어넣는다. 토큰의 낭비다. 둘째, 시간이 지나면 요약 안에서 필요한 부분만 골라내기가 어렵다. 파편은 이 문제를 원자 수준에서 해결한다. "Redis Sentinel 연결 실패 시 REDIS_PASSWORD 환경변수 누락을 먼저 확인할 것. NOAUTH 에러가 증거다." — 이것이 파편 하나다. 필요한 사실만 꺼내온다.
+
+여섯 유형은 기억의 서로 다른 결을 담는다. fact는 변하지 않는 사실 — "이 프로젝트는 Node.js 20을 쓴다". decision은 선택의 흔적 — "커넥션 풀 최대값은 20으로 결정". error는 실패의 해부학 — "pg는 ssl:false 없이 로컬 연결 실패". preference는 인격의 윤곽 — "코드 주석은 한국어로 작성". procedure는 반복되는 의식 — "배포: 테스트 → 빌드 → push → apply". relation은 사물 사이의 연결 — "auth 모듈은 redis에 의존한다". 각 유형마다 기본 중요도와 망각 속도가 다르다. preference와 error는 절대 망각하지 않는다. 취향은 당신이 누구인지를 정의하고, 에러 패턴은 언제 다시 나타날지 모르기 때문이다.
+
 검색은 세 계층을 순서대로 통과한다. Redis Set 연산으로 키워드 교집합을 찾고, PostgreSQL GIN 인덱스로 배열 검색을 수행하고, pgvector HNSW로 코사인 유사도를 계산한다. 기억을 잘 저장하는 것만큼 잘 찾아내는 것도 중요하다. 찾지 못하는 기억은 없는 기억과 같다.
 
-비동기 품질 평가 워커가 백그라운드에서 새 파편을 감시한다. Gemini Flash를 호출하여 내용의 합리성을 검토하고 utility_score를 갱신한다. 주기적 유지보수 파이프라인이 중요도 감쇠, TTL 전환, 중복 병합, 모순 탐지, 고아 링크 정리를 담당한다. 기억은 저장으로 끝나지 않는다. 관리되어야 한다.
+비동기 품질 평가 워커가 백그라운드에서 새 파편을 감시한다. Gemini CLI를 호출하여 내용의 합리성을 검토하고 utility_score를 갱신한다. 주기적 유지보수 파이프라인이 중요도 감쇠, TTL 전환, 중복 병합, 모순 탐지, 고아 링크 정리를 담당한다. 모순 탐지는 3단계 하이브리드로 동작한다 — pgvector 유사도 필터, NLI(Natural Language Inference) 분류, Gemini CLI 에스컬레이션. NLI가 명확한 논리적 모순을 저비용으로 즉시 해소하고, 수치/도메인 모순처럼 NLI가 불확실한 케이스만 Gemini에 넘긴다. 세션이 종료되면 자동으로 reflect가 실행되어 세션 내 활동이 구조화된 파편으로 영속화된다. 기억은 저장으로 끝나지 않는다. 관리되어야 한다.
 
 MCP 프로토콜 버전 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05를 지원한다. Streamable HTTP와 Legacy SSE를 동시에 제공하며 OAuth 2.0 PKCE 인증을 내장한다. 서버는 포트 56332에서 대기한다.
 
@@ -43,14 +47,17 @@ server.js  (HTTP 서버)
     ├── lib/tool-registry.js  11개 기억 도구 등록 및 라우팅
     │
     └── lib/memory/
-            ├── MemoryManager.js      비즈니스 로직 파사드 (싱글턴)
-            ├── FragmentFactory.js    파편 생성, 유효성 검증, PII 마스킹
-            ├── FragmentStore.js      PostgreSQL CRUD, Redis L1 인덱스 갱신
-            ├── FragmentSearch.js     3계층 검색 조율 (L1→L2→L3)
-            ├── FragmentIndex.js      Redis L1 인덱스 관리
-            ├── MemoryConsolidator.js 10단계 유지보수 파이프라인
-            ├── MemoryEvaluator.js    비동기 Gemini 품질 평가 워커 (싱글턴)
-            └── memory-schema.sql     PostgreSQL 스키마 정의
+            ├── MemoryManager.js          비즈니스 로직 파사드 (싱글턴)
+            ├── FragmentFactory.js        파편 생성, 유효성 검증, PII 마스킹
+            ├── FragmentStore.js          PostgreSQL CRUD, Redis L1 인덱스 갱신
+            ├── FragmentSearch.js         3계층 검색 조율 (L1→L2→L3)
+            ├── FragmentIndex.js          Redis L1 인덱스 관리
+            ├── MemoryConsolidator.js     11단계 유지보수 파이프라인 (NLI + Gemini 하이브리드)
+            ├── MemoryEvaluator.js        비동기 Gemini CLI 품질 평가 워커 (싱글턴)
+            ├── NLIClassifier.js          NLI 기반 모순 분류기 (mDeBERTa ONNX, CPU)
+            ├── SessionActivityTracker.js 세션별 도구 호출/파편 활동 추적 (Redis)
+            ├── AutoReflect.js            세션 종료 시 자동 reflect 오케스트레이터
+            └── memory-schema.sql         PostgreSQL 스키마 정의
 ```
 
 나머지 모듈들은 이 핵심을 지원한다.
@@ -62,7 +69,7 @@ lib/
 ├── oauth.js           OAuth 2.0 PKCE 인가/토큰 처리
 ├── sessions.js        Streamable/Legacy SSE 세션 생명주기
 ├── redis.js           ioredis 클라이언트 (Sentinel 지원)
-├── gemini.js          Google Gemini API 클라이언트
+├── gemini.js          Google Gemini API/CLI 클라이언트 (geminiCLIJson, isGeminiCLIAvailable)
 ├── compression.js     응답 압축 (gzip/deflate)
 ├── metrics.js         Prometheus 메트릭 수집 (prom-client)
 ├── logger.js          Winston 로거 (daily rotate)
@@ -207,6 +214,8 @@ recall 도구가 호출되면 파편들은 세 개의 관문을 통해 소환된
 
 **L3: pgvector HNSW 코사인 유사도.** recall 파라미터에 `text` 필드가 있거나 L1/L2 결과가 여전히 미흡할 때 발동한다. 쿼리 텍스트를 OpenAI text-embedding-3-small 모델로 변환하여 1536차원 벡터를 얻고, `embedding <=> $1` 연산자로 코사인 거리를 계산한다. HNSW 인덱스가 근사 최근접 이웃을 빠르게 찾는다. `threshold` 파라미터로 유사도 하한을 지정할 수 있다 — 이 값 미만의 L3 결과는 결과에서 제외된다. L1/L2 경유 결과는 similarity 값이 없으므로 threshold 필터링에서 제외된다.
 
+Redis와 OpenAI API는 선택 사항이다. 없으면 해당 계층 없이 작동한다. PostgreSQL만으로도 L2 검색과 기본 기능은 완전히 동작한다.
+
 세 계층의 결과는 복합 랭킹으로 병합된다. fragments 수가 `MEMORY_CONFIG.ranking.activationThreshold`(기본 100) 이상일 때 복합 랭킹이 활성화된다 — 중요도 가중치 0.6, 최신성 가중치 0.4. 100개 미만일 때는 단순 정렬로 처리한다. 최종 반환량은 `tokenBudget` 파라미터로 제어된다. js-tiktoken cl100k_base 인코더로 파편마다 토큰을 정확히 계산하여 예산 초과 시 잘라낸다. 기본 토큰 예산은 1000이다.
 
 recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파편들의 연결 파편을 1-hop 추가 조회한다. `linkRelationType` 파라미터로 특정 관계 유형만 포함할 수 있다 — 미지정 시 caused_by, resolved_by, related가 포함된다. 연결 파편 조회 한도는 `MEMORY_CONFIG.linkedFragmentLimit`(기본 10)이다.
@@ -215,7 +224,7 @@ recall에 `includeLinks: true`(기본값)가 설정되어 있으면 결과 파�
 
 ## TTL 계층: 기억에도 온도가 있다
 
-파편은 hot, warm, cold, permanent 네 개의 티어를 이동한다. 이 이동은 자동이다. MemoryConsolidator가 주기적으로 판단한다.
+파편은 사용 빈도에 따라 hot, warm, cold, permanent 네 개의 티어를 이동한다. 이 이동은 자동이다. MemoryConsolidator가 주기적으로 판단한다. 다시 참조되는 순간 hot으로 복귀한다. 인간의 장기기억도 이렇게 작동한다 — 오래 안 쓰면 잊히지만, 한번 떠올리면 다시 선명해진다.
 
 ![파편 생명주기](assets/images/lifecycle.png)
 
@@ -258,6 +267,8 @@ stale 기준(일): procedure=30, fact=60, decision=90, default=60. `config/memor
 | agentId | string | | 에이전트 ID. RLS 격리 컨텍스트 설정에 사용 |
 
 반환값: `{ success: true, id: "...", created: true/false }`. created가 false면 기존 파편이 반환된 것이다(중복).
+
+저장 후 pgvector cosine similarity를 직접 쿼리하여 같은 topic의 유사 파편(similarity > 0.7)과 자동으로 링크를 생성한다. 링크 유형은 규칙 기반으로 결정된다: 같은 유형 + 높은 유사도(> 0.85)이면 `superseded_by`, error 유형 간 해결 관계이면 `resolved_by`, 그 외에는 `related`. 최대 3개까지 자동 생성되며, 임베딩이 없는 파편은 자동 링크를 건너뛴다.
 
 ---
 
@@ -331,6 +342,8 @@ id와 topic 중 하나는 있어야 한다. 둘 다 있으면 id가 우선한다
 
 세션 종료 시 대화 전체를 구조화된 파편 집합으로 변환하여 영속화한다. 핵심 결정, 에러 해결, 새 절차, 미해결 질문을 각각 별도 파편으로 저장한다. summary 하나만 있어도 동작하지만, decisions/errors_resolved/new_procedures/open_questions가 있으면 각각 decision/error/procedure/fact 타입 파편으로 개별 저장된다.
 
+수동 호출 외에, 세션 종료/만료/서버 셧다운 시 AutoReflect가 자동으로 실행된다. Gemini CLI가 가용하면 SessionActivityTracker의 활동 로그를 기반으로 구조화된 요약을 생성하고, CLI가 불가하면 메타데이터(소요시간, 도구 사용 통계, 파편 수) 기반의 최소 fact 파편을 생성한다. AI가 수동으로 reflect를 호출한 세션은 자동 reflect를 건너뛴다.
+
 | 파라미터 | 타입 | 필수 | 설명 |
 |---------|------|:----:|------|
 | summary | string | Y | 세션 전체 요약 텍스트 |
@@ -346,7 +359,7 @@ id와 topic 중 하나는 있어야 한다. 둘 다 있으면 id가 우선한다
 
 ### context
 
-세션 시작 시 기억 시스템에서 맥락을 복원한다. Core Memory(중요도 높은 고정 파편)와 Working Memory(현재 세션의 파편)를 분리 로드한다. sessionId를 전달하면 해당 세션의 워킹 메모리도 함께 반환된다.
+세션 시작 시 기억 시스템에서 맥락을 복원한다. Core Memory(중요도 높은 고정 파편)와 Working Memory(현재 세션의 파편)를 분리 로드한다. sessionId를 전달하면 해당 세션의 워킹 메모리도 함께 반환된다. 미반영(unreflected) 세션이 존재하면 injectionText에 `[SYSTEM HINT]`로 세션 수를 알려준다.
 
 | 파라미터 | 타입 | 설명 |
 |---------|------|------|
@@ -396,32 +409,45 @@ id와 topic 중 하나는 있어야 한다. 둘 다 있으면 id가 우선한다
 
 ---
 
+## 권장 사용 흐름
+
+기억 시스템은 세션의 생명주기를 따라 작동한다.
+
+1. 세션 시작 — `context()`로 핵심 기억을 로드한다. 이전 세션에서 축적된 선호, 에러 패턴, 절차가 복원된다. 미반영 세션이 있으면 힌트가 표시된다.
+2. 작업 중 — 중요한 결정, 에러, 절차가 발생하면 `remember()`로 저장한다. 저장 시 유사 파편과 자동으로 링크가 생성된다. 과거 경험이 필요하면 `recall()`로 검색한다. 에러를 해결했으면 `forget()`으로 에러 파편을 정리하고 `remember()`로 해결 절차를 기록한다.
+3. 세션 종료 — `reflect()`로 세션 내용을 구조화된 파편으로 영속화한다. 수동 호출을 잊더라도 세션 종료/만료 시 AutoReflect가 자동으로 실행된다. 다음 세션의 `context()`가 이 파편들을 불러온다.
+
+이 순환이 반복될수록 AI는 당신의 프로젝트를, 당신의 선호를, 당신이 겪었던 실패를 기억하게 된다.
+
+---
+
 ## MemoryEvaluator: 잠들지 않는 검열관
 
 서버가 시작되면 MemoryEvaluator 워커가 백그라운드에서 구동된다. `getMemoryEvaluator().start()`로 시작되는 싱글턴이다. SIGTERM/SIGINT 수신 시 graceful shutdown 흐름에서 중지된다.
 
-워커는 5초 간격으로 Redis 큐 `memory_evaluation`을 폴링한다. 큐가 비어 있으면 대기한다. 큐에서 잡(job)을 꺼내면 Google Gemini Flash API를 호출하여 파편 내용의 합리성을 평가한다. 평가 결과는 fragments 테이블의 utility_score와 verified_at을 갱신하는 데 사용된다.
+워커는 5초 간격으로 Redis 큐 `memory_evaluation`을 폴링한다. 큐가 비어 있으면 대기한다. 큐에서 잡(job)을 꺼내면 Gemini CLI(`geminiCLIJson`)를 호출하여 파편 내용의 합리성을 평가한다. 평가 결과는 fragments 테이블의 utility_score와 verified_at을 갱신하는 데 사용된다.
 
 새 파편이 remember로 저장될 때 평가 큐에 자동으로 투입된다. 평가는 저장과 비동기로 분리되어 있으므로 remember 호출의 응답 시간에 영향을 주지 않는다.
 
-Gemini API 키가 설정되지 않은 경우 워커는 구동되지만 평가 작업을 건너뛴다.
+Gemini CLI가 설치되지 않은 환경에서는 워커가 구동되지만 평가 작업을 건너뛴다.
 
 ---
 
 ## MemoryConsolidator: 기억의 정원사
 
-memory_consolidate 도구가 실행되거나 서버 내부 스케줄러가 트리거할 때 동작하는 10단계 유지보수 파이프라인이다.
+memory_consolidate 도구가 실행되거나 서버 내부 스케줄러가 트리거할 때 동작하는 11단계 유지보수 파이프라인이다.
 
-1. **hot → warm 강등**: 생성된 지 일정 시간이 경과한 hot 파편을 warm으로 이동
-2. **warm → cold 강등**: 오랫동안 접근되지 않은 warm 파편을 cold로 이동
-3. **cold 만료 삭제**: stale 임계값을 초과한 cold 파편 삭제. `is_anchor=true` 파편 제외
-4. **중요도 감쇠(decay)**: 접근 빈도가 낮고 utility_score가 낮은 파편의 importance 하향 조정. `is_anchor=true` 파편 제외
-5. **중복 병합**: content_hash가 동일한 파편들을 가장 오래된 것으로 병합. 링크와 접근 통계 통합
-6. **모순 탐지**: `contradicts` 관계로 연결된 파편 쌍을 감지하고 표시
-7. **고아 링크 정리**: 참조 파편이 삭제된 fragment_links 레코드 제거
-8. **utility_score 재계산**: access_count, accessed_at, importance를 종합하여 utility_score 갱신
-9. **임베딩 생성 큐 투입**: embedding이 NULL인 파편을 평가 큐에 추가하여 비동기 임베딩 생성 요청
-10. **요약 통계 반환**: 각 단계의 처리 건수를 집계하여 반환
+1. **TTL 계층 전환**: hot → warm → cold 강등. 접근 빈도와 경과 시간 기준
+2. **중요도 감쇠(decay)**: 접근 빈도가 낮은 파편의 importance 하향 조정. `is_anchor=true` 제외
+3. **만료 파편 삭제**: stale 임계값을 초과한 cold 파편 삭제. `is_anchor=true` 제외
+4. **중복 병합**: content_hash가 동일한 파편들을 가장 중요한 것으로 병합. 링크와 접근 통계 통합
+5. **누락 임베딩 보충**: embedding이 NULL인 파편에 대해 비동기 임베딩 생성
+6. **utility_score 재계산**: `importance * (1 + ln(max(access_count, 1)))` 공식으로 갱신
+7. **앵커 자동 승격**: access_count >= 10 + importance >= 0.8인 파편을 `is_anchor=true`로 승격
+8. **증분 모순 탐지 (3단계 하이브리드)**: 마지막 검사 이후 신규 파편에 대해 같은 topic의 기존 파편과 pgvector cosine similarity > 0.85인 쌍을 추출(Stage 1). NLI 분류기(mDeBERTa ONNX)로 entailment/contradiction/neutral을 판정(Stage 2) — 높은 신뢰도 모순(conf >= 0.8)은 Gemini 호출 없이 즉시 해소, 확실한 entailment는 즉시 통과. NLI가 불확실한 케이스(수치/도메인 모순)만 Gemini CLI로 에스컬레이션(Stage 3). 확인 시 `contradicts` 링크 + 시간 논리 기반 해소(구 파편 중요도 하향 + `superseded_by` 링크). CLI 불가 시 similarity > 0.92인 쌍을 Redis pending 큐에 적재
+9. **보류 모순 후처리**: Gemini CLI가 가용해지면 pending 큐에서 최대 10건을 꺼내 재판정
+10. **피드백 리포트 생성**: tool_feedback/task_feedback 데이터를 집계하여 도구별 유용성 리포트 생성
+11. **Redis 인덱스 정리 + stale 파편 수집**: 고아 키워드 인덱스 제거 및 검증 주기 초과 파편 목록 반환
 
 ---
 
@@ -506,7 +532,7 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | OPENAI_API_KEY | (없음) | OpenAI API 키. 임베딩 생성에 사용 |
 | EMBEDDING_MODEL | text-embedding-3-small | 사용할 임베딩 모델 |
 | EMBEDDING_DIMENSIONS | 1536 | 임베딩 벡터 차원 수. DB 스키마의 vector(1536)와 일치해야 한다 |
-| GEMINI_API_KEY | (없음) | Google Gemini API 키. MemoryEvaluator에서 사용 |
+| GEMINI_API_KEY | (없음) | Google Gemini API 키. 레거시 호환용. Gemini CLI 설치 시 불필요 |
 
 ---
 
@@ -527,6 +553,20 @@ POSTGRES_* 접두어가 DB_* 접두어보다 우선한다. 두 형식을 혼용�
 | POST | /token | OAuth 2.0 토큰 엔드포인트. authorization_code 교환 |
 
 인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE는 `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터로 인증한다.
+
+---
+
+## 기술 스택
+
+- Node.js 20+
+- PostgreSQL 14+ (pgvector 확장)
+- Redis 6+ (선택)
+- OpenAI Embedding API (선택)
+- Gemini CLI (품질 평가, 모순 에스컬레이션, 자동 reflect 요약 생성용, 선택)
+- @huggingface/transformers + ONNX Runtime (NLI 모순 분류, CPU 전용, 자동 설치)
+- MCP Protocol 2025-11-25
+
+PostgreSQL만 있으면 핵심 기능이 동작한다. Redis를 추가하면 L1 캐스케이드 검색과 SessionActivityTracker가 활성화되고, OpenAI API를 추가하면 L3 시맨틱 검색과 자동 링크가 활성화된다. NLI 모델은 npm install 시 자동으로 포함되며, 최초 실행 시 ~280MB ONNX 모델을 다운로드한다(이후 캐싱). NLI만으로도 명확한 논리적 모순을 즉시 탐지하며, Gemini CLI를 추가하면 수치/도메인 모순까지 처리 범위가 확장된다. 각 구성 요소는 독립적으로 활성화/비활성화할 수 있다.
 
 ---
 
@@ -560,6 +600,16 @@ Claude Code 연결 설정 예시 (`~/.claude/settings.json` 또는 프로젝트 
 ```
 
 외부에서 접속할 때는 nginx 리버스 프록시를 통해 노출한다. 내부 IP나 내부 포트를 외부 문서에 직접 기재하지 않는다.
+
+---
+
+## 만들게 된 계기
+
+실무에서 AI를 쓰면서 매일 같은 맥락을 반복 설명하는 비효율을 느꼈다. 시스템 프롬프트에 메모를 넣는 방법도 써봤지만 한계가 명확했다. 파편 수가 늘어나면 관리가 안 되고, 검색이 안 되고, 오래된 정보와 새 정보가 충돌했다.
+
+이미 설명한 것, 이미 세팅한 것을 무한히 반복하게 만드는 것이 가장 큰 문제였다. 인증 정보가 없다고 해서 보면 있고, 세팅 안 돼 있다고 해서 파일을 직접 열어보면 다 돼 있다. 철저하게 논파해서 말 잘 듣게 해 봐야 그때뿐이다. 세션을 다시 시작하면 같은 일이 또 반복된다. 명문대를 수석 졸업했지만 매일 뇌가 리셋되는 신입사원의 교육담당자가 된 기분이었다.
+
+이 고충을 해소하기 위해 기억을 원자 단위로 분해하고, 계층적으로 검색하고, 시간에 따라 자연스럽게 망각하는 시스템을 설계했다. 인간이 망각의 동물인 것처럼, 이 시스템은 "적절한 망각"을 포함한 기억을 지향한다.
 
 ---
 

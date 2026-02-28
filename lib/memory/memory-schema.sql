@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragment_links (
     id            BIGSERIAL PRIMARY KEY,
     from_id       TEXT NOT NULL REFERENCES agent_memory.fragments(id) ON DELETE CASCADE,
     to_id         TEXT NOT NULL REFERENCES agent_memory.fragments(id) ON DELETE CASCADE,
-    relation_type TEXT DEFAULT 'related' CHECK (relation_type IN ('related','caused_by','resolved_by','part_of','contradicts')),
+    relation_type TEXT DEFAULT 'related' CHECK (relation_type IN ('related','caused_by','resolved_by','part_of','contradicts','superseded_by')),
     created_at    TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(from_id, to_id)
 );
@@ -114,3 +114,38 @@ CREATE INDEX IF NOT EXISTS idx_taskfb_session
     ON agent_memory.task_feedback(session_id);
 CREATE INDEX IF NOT EXISTS idx_taskfb_created
     ON agent_memory.task_feedback(created_at DESC);
+
+-- 파편 이력 보존 테이블
+CREATE TABLE IF NOT EXISTS agent_memory.fragment_versions (
+    id           BIGSERIAL PRIMARY KEY,
+    fragment_id  TEXT NOT NULL REFERENCES agent_memory.fragments(id) ON DELETE CASCADE,
+    content      TEXT NOT NULL,
+    topic        TEXT,
+    keywords     TEXT[],
+    type         TEXT,
+    importance   REAL,
+    amended_at   TIMESTAMPTZ DEFAULT NOW(),
+    amended_by   TEXT -- agent_id
+);
+
+CREATE INDEX IF NOT EXISTS idx_ver_frag ON agent_memory.fragment_versions(fragment_id);
+
+-- fragments 테이블 기능 확장
+ALTER TABLE agent_memory.fragments ADD COLUMN IF NOT EXISTS is_anchor BOOLEAN DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_frag_anchor ON agent_memory.fragments(is_anchor) WHERE is_anchor = TRUE;
+
+-- Row-Level Security (RLS) 적용
+ALTER TABLE agent_memory.fragments ENABLE ROW LEVEL SECURITY;
+
+-- 에이전트 격리 정책: 세션 변수 'app.current_agent_id'와 일치하는 데이터만 접근 허용
+-- agent_id가 'default'인 경우는 공용 데이터로 간주하여 조회 허용
+-- 'system' 또는 'admin' 세션은 모든 데이터에 접근 허용 (유지보수용)
+CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
+    USING (
+        agent_id = current_setting('app.current_agent_id', true) 
+        OR agent_id = 'default'
+        OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
+    );
+
+-- fragment_links는 fragments를 참조하므로 fragments의 RLS에 의해 간접적으로 보호됨
+-- 하지만 명시적으로 ENABLE RLS를 할 수도 있음 (성능 고려 필요)
