@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
+</p>
+
 # Memento MCP
 
 ## 기억론 소고: 망각하는 기계에게 보내는 편지
@@ -14,9 +18,15 @@ Memento MCP는 그 망각에 반대한다.
 
 여섯 유형은 기억의 서로 다른 결을 담는다. fact는 변하지 않는 사실 — "이 프로젝트는 Node.js 20을 쓴다". decision은 선택의 흔적 — "커넥션 풀 최대값은 20으로 결정". error는 실패의 해부학 — "pg는 ssl:false 없이 로컬 연결 실패". preference는 인격의 윤곽 — "코드 주석은 한국어로 작성". procedure는 반복되는 의식 — "배포: 테스트 → 빌드 → push → apply". relation은 사물 사이의 연결 — "auth 모듈은 redis에 의존한다". 각 유형마다 기본 중요도와 망각 속도가 다르다. preference와 error는 절대 망각하지 않는다. 취향은 당신이 누구인지를 정의하고, 에러 패턴은 언제 다시 나타날지 모르기 때문이다.
 
+![지식 네트워크](assets/images/knowledge-graph.png)
+
 검색은 세 계층을 순서대로 통과한다. Redis Set 연산으로 키워드 교집합을 찾고, PostgreSQL GIN 인덱스로 배열 검색을 수행하고, pgvector HNSW로 코사인 유사도를 계산한다. 기억을 잘 저장하는 것만큼 잘 찾아내는 것도 중요하다. 찾지 못하는 기억은 없는 기억과 같다.
 
+![토큰 효율성](assets/images/token-efficiency.png)
+
 비동기 품질 평가 워커가 백그라운드에서 새 파편을 감시한다. Gemini CLI를 호출하여 내용의 합리성을 검토하고 utility_score를 갱신한다. 주기적 유지보수 파이프라인이 중요도 감쇠, TTL 전환, 중복 병합, 모순 탐지, 고아 링크 정리를 담당한다. 모순 탐지는 3단계 하이브리드로 동작한다 — pgvector 유사도 필터, NLI(Natural Language Inference) 분류, Gemini CLI 에스컬레이션. NLI가 명확한 논리적 모순을 저비용으로 즉시 해소하고, 수치/도메인 모순처럼 NLI가 불확실한 케이스만 Gemini에 넘긴다. 세션이 종료되면 자동으로 reflect가 실행되어 세션 내 활동이 구조화된 파편으로 영속화된다. 기억은 저장으로 끝나지 않는다. 관리되어야 한다.
+
+![유지보수 사이클](assets/images/maintenance-cycle.png)
 
 MCP 프로토콜 버전 2025-11-25, 2025-06-18, 2025-03-26, 2024-11-05를 지원한다. Streamable HTTP와 Legacy SSE를 동시에 제공하며 OAuth 2.0 PKCE 인증을 내장한다. 서버는 포트 56332에서 대기한다.
 
@@ -576,12 +586,18 @@ PostgreSQL만 있으면 핵심 기능이 동작한다. Redis를 추가하면 L1 
 # 의존성 설치
 npm install
 
+# (선택) CUDA 11 환경에서 설치 오류 발생 시 CPU 전용으로 설치
+# npm install --onnxruntime-node-install-cuda=skip
+
 # PostgreSQL 스키마 적용
 psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
 
 # 서버 실행
 node server.js
 ```
+
+### 주의사항: ONNX Runtime 및 CUDA
+CUDA 11이 설치된 시스템에서 `@huggingface/transformers`의 의존성인 `onnxruntime-node`가 GPU 바인딩을 시도하다 설치에 실패할 수 있습니다. 이 프로젝트는 CPU 전용으로 최적화되어 있으므로, 설치 시 `--onnxruntime-node-install-cuda=skip` 플래그를 사용하면 문제 없이 설치됩니다.
 
 Claude Code 연결 설정 예시 (`~/.claude/settings.json` 또는 프로젝트 `.claude/settings.json`):
 

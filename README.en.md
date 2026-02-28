@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
+</p>
+
 # Memento MCP: A Fragment-Based Persistent Memory Subsystem for Stateless Language Model Agents
 
 ---
@@ -39,7 +43,11 @@ Naïve remediation approaches, such as prepending entire conversation histories 
 
 Memento MCP adopts a *fragment-based* representation. Rather than storing monolithic conversation transcripts, the system decomposes agent knowledge into fine-grained, independently retrievable units. Each fragment is a typed, keyword-annotated, vector-embedded record — independently queryable, linked to related fragments via a typed edge relation, and subject to a lifecycle management policy that governs TTL tier assignment, importance score decay, and eventual expiration. This design mirrors, at an abstract level, the distinction Aristotle drew in *De Memoria et Reminiscentia* between *mneme* (passive retention of impressions) and *anamnesis* (active retrieval through associative search) — though we refrain from asserting neurological correspondence.
 
+![Knowledge Graph](assets/images/knowledge-graph.png)
+
 The following sections describe the system architecture (§2), the PostgreSQL schema and indexing strategy (§3), the three-tier retrieval cascade (§4), the fragment lifecycle model (§5), the complete MCP tool interface (§6), the asynchronous quality evaluation subsystem (§7), the consolidation pipeline (§8), fault tolerance behavior (§9), the configuration surface (§10), and deployment considerations (§11).
+
+![Token Efficiency](assets/images/token-efficiency.png)
 
 ---
 

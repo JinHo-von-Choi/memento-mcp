@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/images/memento_mcp_logo_transparent.png" width="400" alt="Memento MCP Logo">
+</p>
+
 # Memento MCP
 
 > 원래 다른 직접 만든 MCP의 보조기능이었는데 쓰다보니 ㄱㅊ한거 같아서 배포용으로 분리함.
@@ -72,11 +76,17 @@ MCP(Model Context Protocol) 기반의 AI 중장기 기억 시스템이다. AI가
 
 `preference`와 `error`는 절대 망각하지 않는다. 취향은 너가 누구인지를 정의하고, 에러 패턴은 언제 다시 만날지 모르기 때문이다.
 
+![지식 네트워크](assets/images/knowledge-graph.png)
+
 ---
 
 ## 4. 삼층 캐스케이드 검색
 
 기억을 찾을 때 세 개의 레이어를 순서대로 두드린다. 빠른 층에서 답이 나오면 느린 층은 건드리지 않는다.
+
+![검색 흐름](assets/images/retrieval.png)
+
+![토큰 효율성](assets/images/token-efficiency.png)
 
 | 계층 | 엔진 | 방식 | 속도 |
 |------|------|------|------|
@@ -91,6 +101,8 @@ Redis와 OpenAI는 선택 사항이다. 없으면 해당 레이어 없이 작동
 ## 5. TTL 계층 -- 기억의 온도
 
 파편은 사용 빈도에 따라 `hot`, `warm`, `cold`, `permanent` 사이를 이동한다.
+
+![파편 생명주기](assets/images/lifecycle.png)
 
 ```
 hot (자주 참조됨) → warm (한동안 침묵) → cold (오래 잠듦) → TTL 만료 시 삭제
@@ -162,6 +174,7 @@ psql -U postgres -d memento -f lib/memory/memory-schema.sql
 
 # 서버 실행
 npm install
+# (팁) CUDA 설치 오류 시: npm install --onnxruntime-node-install-cuda=skip
 npm start
 ```
 
@@ -182,7 +195,13 @@ MCP 클라이언트 설정에 아래를 추가하면 된다.
 
 ---
 
-## 10. 만들게 된 계기
+## 10. 시스템 구조
+
+![시스템 아키텍처](assets/images/architecture.png)
+
+---
+
+## 11. 만들게 된 계기
 
 실무에서 Claude를 쓰면서 매일 같은 맥락을 반복 설명하는 게 비효율적이라 느꼈다. 시스템 프롬프트에 메모를 넣는 방법도 써봤지만 한계가 명확했음. 파편 수가 늘어나면 관리가 안 되고, 검색이 안 되고, 오래된 정보와 새 정보가 충돌함.
 
@@ -204,6 +223,8 @@ MCP 클라이언트 설정에 아래를 추가하면 된다.
 `amend`라는 도구로 내용만 덮어쓸 수 있음. ID는 그대로라서 연결된 관계도 안 끊어짐. 예를 들어 "배포 서버는 A"라는 기억이 있었는데 B로 바뀌었으면, 그 파편만 수정하면 "A 서버에서 에러 났었음 -> 이렇게 해결함" 같은 연결 고리가 그대로 살아 있음.
 
 그리고 주기적으로 `memory_consolidate`를 돌리면, 서로 모순되는 파편을 3단계로 잡아냄. 먼저 pgvector가 비슷한 놈들을 추려내고, NLI(자연어추론) 모델이 "이거 모순이다/아니다"를 판정함. "서버는 절대 재시작 안 함" vs "매일 3시에 재시작함" 같은 논리적 모순은 NLI가 0.98 신뢰도로 즉시 잡음. Gemini 호출 없이. "최대값 20" vs "최대값 50" 같은 수치 모순은 NLI가 "잘 모르겠는데?" 하면 그때만 Gemini CLI로 넘김. 모순 확인되면 새 파편이 이기고, 옛날 파편 중요도는 반토막남.
+
+![유지보수 사이클](assets/images/maintenance-cycle.png)
 
 </details>
 
