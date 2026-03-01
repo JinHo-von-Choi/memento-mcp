@@ -31,7 +31,9 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragments (
     estimated_tokens INTEGER DEFAULT 0,
     utility_score    REAL DEFAULT 1.0,
     verified_at      TIMESTAMPTZ DEFAULT NOW(),
-    embedding        vector(1536)
+    -- 로컬 모델(Xenova/all-MiniLM-L6-v2): vector(384)
+    -- OpenAI(text-embedding-3-small): vector(1536)
+    embedding        vector(384)
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_frag_hash
