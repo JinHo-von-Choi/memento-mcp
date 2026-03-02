@@ -11,9 +11,12 @@
  */
 
 import http              from "http";
+import { readFileSync }  from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR } from "./lib/config.js";
+import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, EMBEDDING_DIMENSIONS } from "./lib/config.js";
 
 /** 메트릭 */
 import {
@@ -518,10 +521,50 @@ const server               = http.createServer(async (req, res) => {
   recordHttpRequest(req.method, url.pathname, 404, duration);
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, async () => {
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");
+
+  /** Auto-apply database schema (idempotent — all statements use IF NOT EXISTS) */
+  try {
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const schemaSQL = readFileSync(join(__dirname, "lib/memory/memory-schema.sql"), "utf8");
+    const pool = getPrimaryPool();
+    await pool.query("CREATE EXTENSION IF NOT EXISTS vector");
+    await pool.query(schemaSQL);
+    console.log("[Startup] Database schema applied successfully");
+
+    /** Reconcile embedding column dimension with EMBEDDING_DIMENSIONS config */
+    const dimCheck = await pool.query(`
+      SELECT atttypmod - 4 AS dim FROM pg_attribute
+      WHERE attrelid = 'agent_memory.fragments'::regclass
+        AND attname = 'embedding' AND atttypmod > 0
+    `);
+    const currentDim = dimCheck.rows[0]?.dim;
+    if (currentDim && currentDim !== EMBEDDING_DIMENSIONS) {
+      const hasData = await pool.query(
+        `SELECT 1 FROM agent_memory.fragments WHERE embedding IS NOT NULL LIMIT 1`
+      );
+      if (hasData.rows.length === 0) {
+        await pool.query(`DROP INDEX IF EXISTS agent_memory.idx_frag_embedding`);
+        await pool.query(
+          `ALTER TABLE agent_memory.fragments ALTER COLUMN embedding TYPE vector(${EMBEDDING_DIMENSIONS})`
+        );
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_frag_embedding
+            ON agent_memory.fragments USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 64)
+            WHERE embedding IS NOT NULL
+        `);
+        console.log(`[Startup] Embedding column changed from vector(${currentDim}) to vector(${EMBEDDING_DIMENSIONS})`);
+      } else {
+        console.warn(`[Startup] Embedding dimension mismatch: column is vector(${currentDim}), config is ${EMBEDDING_DIMENSIONS}. Skipping (existing data present).`);
+      }
+    }
+  } catch (err) {
+    console.error("[Startup] Schema auto-apply failed:", err.message);
+  }
 
   if (ACCESS_KEY) {
     console.log("Authentication: ENABLED");
