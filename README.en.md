@@ -894,7 +894,8 @@ export const MEMORY_CONFIG = {
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OPENAI_API_KEY` | (empty) | OpenAI API key for embedding generation. L3 retrieval and auto-linking unavailable when absent. |
+| `OPENAI_API_KEY` | (empty) | OpenAI API key for embedding generation. When using Ollama or other compatible local servers, set to any non-empty string (e.g. `ollama`). |
+| `EMBEDDING_BASE_URL` | (empty) | Custom OpenAI-compatible endpoint. E.g. `http://localhost:11434/v1` for Ollama. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model identifier |
 | `EMBEDDING_DIMENSIONS` | `1536` | Embedding dimensionality. Must match `vector(N)` in the schema. |
 | `GEMINI_API_KEY` | (empty) | Google Gemini API key for legacy API mode. Gemini CLI is preferred when installed; this key is used as fallback. |
@@ -902,6 +903,305 @@ export const MEMORY_CONFIG = {
 **NLI model:** The NLI classifier (`@huggingface/transformers` + ONNX Runtime) requires no API key. The mDeBERTa model (~280MB ONNX) is downloaded automatically on first use and cached locally. No GPU is required; inference runs on CPU via ONNX Runtime.
 
 **Gemini CLI:** When the `gemini` CLI is installed and available on `$PATH`, it is used in preference to the REST API for all Gemini operations (fragment evaluation, contradiction adjudication, auto-reflect summary generation). Install via `npm install -g @anthropic/gemini-cli` or the platform-specific package manager.
+
+---
+
+## 10.3 Embedding Service Configuration
+
+Embeddings power L3 semantic search and automatic fragment linking. The default is OpenAI `text-embedding-3-small`. You can switch providers using environment variables alone (OpenAI-compatible servers) or by replacing the `generateEmbedding` function in `lib/tools/embedding.js` (proprietary APIs).
+
+> **Dimension change warning:** Changing `EMBEDDING_DIMENSIONS` requires recreating the PostgreSQL schema and regenerating all embeddings. Re-run `node lib/memory/normalize-vectors.js` after migration.
+
+---
+
+### OpenAI (default)
+
+```env
+OPENAI_API_KEY=sk-...
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| text-embedding-3-small | 1536 | Default. Cost-efficient. |
+| text-embedding-3-large | 3072 | Higher accuracy. 2× cost. |
+| text-embedding-ada-002 | 1536 | Legacy. |
+
+---
+
+### Ollama (local, free)
+
+Ollama exposes a `/v1/embeddings` OpenAI-compatible endpoint. No code changes required.
+
+```bash
+ollama pull nomic-embed-text
+ollama pull mxbai-embed-large
+```
+
+```env
+OPENAI_API_KEY=ollama
+EMBEDDING_BASE_URL=http://localhost:11434/v1
+EMBEDDING_MODEL=nomic-embed-text
+EMBEDDING_DIMENSIONS=768
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| nomic-embed-text | 768 | 8192-token context, strong MTEB scores |
+| mxbai-embed-large | 1024 | 512-token context, competitive MTEB scores |
+| all-minilm | 384 | Lightweight, fast inference |
+
+---
+
+### LocalAI (local, OpenAI-compatible)
+
+```env
+OPENAI_API_KEY=localai
+EMBEDDING_BASE_URL=http://localhost:8080/v1
+EMBEDDING_MODEL=text-embedding-ada-002
+EMBEDDING_DIMENSIONS=1536
+```
+
+---
+
+### LM Studio (local, OpenAI-compatible)
+
+Enable the Local Server in LM Studio, load an embedding model, then:
+
+```env
+OPENAI_API_KEY=lmstudio
+EMBEDDING_BASE_URL=http://localhost:1234/v1
+EMBEDDING_MODEL=nomic-ai/nomic-embed-text-v1.5-GGUF
+EMBEDDING_DIMENSIONS=768
+```
+
+---
+
+### llama.cpp server (local, OpenAI-compatible)
+
+```bash
+./llama-server -m nomic-embed-text-v1.5.Q4_K_M.gguf --embedding --port 8080
+```
+
+```env
+OPENAI_API_KEY=llamacpp
+EMBEDDING_BASE_URL=http://localhost:8080/v1
+EMBEDDING_MODEL=nomic-embed-text-v1.5
+EMBEDDING_DIMENSIONS=768
+```
+
+---
+
+### Proprietary APIs (custom adapter required)
+
+Cohere, Voyage AI, Gemini, Mistral, Jina AI, and Nomic either have non-OpenAI-compatible APIs or require specific request structures. Replace the `generateEmbedding` function in `lib/tools/embedding.js` with the snippet for your provider.
+
+#### Cohere
+
+```bash
+npm install cohere-ai
+```
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+import { CohereClient } from "cohere-ai";
+
+const cohere = new CohereClient({ token: process.env.COHERE_API_KEY });
+
+export async function generateEmbedding(text) {
+  const res = await cohere.v2.embed({
+    model:          "embed-v4.0",
+    inputType:      "search_document",
+    embeddingTypes: ["float"],
+    texts:          [text]
+  });
+  return normalizeL2(res.embeddings.float[0]);
+}
+```
+
+```env
+COHERE_API_KEY=...
+EMBEDDING_DIMENSIONS=1536
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| embed-v4.0 | 1536 | Latest, multilingual |
+| embed-multilingual-v3.0 | 1024 | Legacy multilingual |
+
+---
+
+#### Voyage AI
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+export async function generateEmbedding(text) {
+  const res = await fetch("https://api.voyageai.com/v1/embeddings", {
+    method:  "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.VOYAGE_API_KEY}`,
+      "Content-Type":  "application/json"
+    },
+    body: JSON.stringify({ model: "voyage-3.5", input: [text] })
+  });
+  const data = await res.json();
+  return normalizeL2(data.data[0].embedding);
+}
+```
+
+```env
+VOYAGE_API_KEY=...
+EMBEDDING_DIMENSIONS=1024
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| voyage-3.5 | 1024 | Highest accuracy |
+| voyage-3.5-lite | 512 | Lower cost, faster |
+| voyage-code-3 | 1024 | Code-optimized |
+
+---
+
+#### Google Gemini
+
+The existing `GEMINI_API_KEY` environment variable can be reused.
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+export async function generateEmbedding(text) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${process.env.GEMINI_API_KEY}`;
+  const res  = await fetch(url, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({
+      model:   "models/text-embedding-004",
+      content: { parts: [{ text }] }
+    })
+  });
+  const data = await res.json();
+  return normalizeL2(data.embedding.values);
+}
+```
+
+```env
+GEMINI_API_KEY=...
+EMBEDDING_DIMENSIONS=768
+```
+
+---
+
+#### Mistral AI
+
+Uses OpenAI SDK — only `baseURL` differs.
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey:  process.env.MISTRAL_API_KEY,
+  baseURL: "https://api.mistral.ai/v1"
+});
+
+export async function generateEmbedding(text) {
+  const res = await client.embeddings.create({
+    model: "mistral-embed",
+    input: [text]
+  });
+  return normalizeL2(res.data[0].embedding);
+}
+```
+
+```env
+MISTRAL_API_KEY=...
+EMBEDDING_DIMENSIONS=1024
+```
+
+---
+
+#### Jina AI
+
+Free tier: 100 RPM / 1M tokens per month.
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+export async function generateEmbedding(text) {
+  const res = await fetch("https://api.jina.ai/v1/embeddings", {
+    method:  "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.JINA_API_KEY}`,
+      "Content-Type":  "application/json"
+    },
+    body: JSON.stringify({
+      model: "jina-embeddings-v3",
+      task:  "retrieval.passage",
+      input: [text]
+    })
+  });
+  const data = await res.json();
+  return normalizeL2(data.data[0].embedding);
+}
+```
+
+```env
+JINA_API_KEY=...
+EMBEDDING_DIMENSIONS=1024
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| jina-embeddings-v3 | 1024 | MRL support (32–1024 flexible) |
+| jina-embeddings-v2-base-en | 768 | English-only |
+
+---
+
+#### Nomic
+
+Free tier: 1M tokens per month. Uses OpenAI SDK with a custom `baseURL`.
+
+```js
+// lib/tools/embedding.js — replace generateEmbedding
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey:  process.env.NOMIC_API_KEY,
+  baseURL: "https://api-atlas.nomic.ai/v1"
+});
+
+export async function generateEmbedding(text) {
+  const res = await client.embeddings.create({
+    model: "nomic-embed-text-v1.5",
+    input: [text]
+  });
+  return normalizeL2(res.data[0].embedding);
+}
+```
+
+```env
+NOMIC_API_KEY=...
+EMBEDDING_DIMENSIONS=768
+```
+
+---
+
+### Provider Comparison
+
+| Provider | Dimensions | Configuration | Free Tier |
+|----------|------------|---------------|-----------|
+| OpenAI text-embedding-3-small | 1536 | Env vars only | No |
+| OpenAI text-embedding-3-large | 3072 | Env vars only | No |
+| Ollama (nomic-embed-text) | 768 | Env vars only | Free (local) |
+| Ollama (mxbai-embed-large) | 1024 | Env vars only | Free (local) |
+| LocalAI | Variable | Env vars only | Free (local) |
+| LM Studio | Variable | Env vars only | Free (local) |
+| llama.cpp | Variable | Env vars only | Free (local) |
+| Cohere embed-v4.0 | 1536 | Code replacement | No |
+| Voyage AI voyage-3.5 | 1024 | Code replacement | No |
+| Google Gemini text-embedding-004 | 768 | Code replacement | Limited |
+| Mistral mistral-embed | 1024 | Code replacement | No |
+| Jina jina-embeddings-v3 | 1024 | Code replacement | 1M tokens/mo |
+| Nomic nomic-embed-text-v1.5 | 768 | Code replacement | 1M tokens/mo |
 
 ---
 
