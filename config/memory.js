@@ -3,7 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-02-25
- * 수정일: 2026-03-03 (halfLife 감쇠 설정 추가)
+ * 수정일: 2026-03-03 (halfLife 감쇠 설정 추가, RRF 검색 설정 추가)
  */
 
 export const MEMORY_CONFIG = {
@@ -36,5 +36,10 @@ export const MEMORY_CONFIG = {
     preference: 120,
     relation  : 90,
     default   : 60
+  },
+  /** Reciprocal Rank Fusion 검색 설정 */
+  rrfSearch: {
+    k             : 60,   // RRF 상수 (높을수록 상위 랭크 부스트 감소)
+    l1WeightFactor: 2.0   // L1(Redis) 결과 가중치 배수
   }
 };
