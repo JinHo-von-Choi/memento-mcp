@@ -138,14 +138,18 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 | `MemoryManager.js` | Business logic facade. Singleton. Coordinates all memory operations. |
 | `FragmentFactory.js` | Fragment construction, schema validation, keyword extraction, PII masking, TTL inference. |
 | `FragmentStore.js` | PostgreSQL CRUD operations; Redis L1 index synchronization on write. |
-| `FragmentSearch.js` | Three-tier retrieval cascade orchestration (L1 → L2 → L3). |
+| `FragmentSearch.js` | Three-tier retrieval cascade orchestration (L1 → L2 → L3, RRF hybrid merge). |
 | `FragmentIndex.js` | Redis L1 index management (Set operations per keyword). |
 | `MemoryConsolidator.js` | Eleven-stage lifecycle maintenance pipeline (NLI + Gemini CLI hybrid contradiction detection). |
 | `MemoryEvaluator.js` | Asynchronous Gemini CLI quality assessment worker. Singleton. |
 | `NLIClassifier.js` | Natural Language Inference classifier (mDeBERTa ONNX, CPU-only). Entailment/contradiction/neutral labeling for contradiction detection Stage 2. |
 | `SessionActivityTracker.js` | Per-session tool call and fragment activity tracking (Redis Hash). TTL 24h. |
 | `AutoReflect.js` | Automatic `reflect` orchestrator triggered on session termination. Gemini CLI summary with minimal fallback. |
+| `decay.js` | Half-life constants per fragment type and pure exponential decay computation function. |
+| `normalize-vectors.js` | One-time migration script to L2-normalize existing embeddings in the database. |
 | `memory-schema.sql` | PostgreSQL DDL for the `agent_memory` schema. |
+| `migration-001-temporal.sql` | Schema migration: adds `valid_from`, `valid_to`, `superseded_by` columns and temporal indexes. |
+| `migration-002-decay.sql` | Schema migration: adds `last_decay_at` column for idempotent decay tracking. |
 
 Supporting infrastructure modules:
 
@@ -187,8 +191,12 @@ erDiagram
         text agent_id "RLS Key"
         integer access_count
         real utility_score
-        vector embedding "OpenAI 1536"
+        vector embedding "OpenAI 1536, L2-normalized"
         boolean is_anchor
+        timestamptz valid_from "Temporal validity start"
+        timestamptz valid_to "Temporal validity end (NULL=current)"
+        text superseded_by "Superseding fragment ID"
+        timestamptz last_decay_at "Last decay application timestamp"
     }
     fragment_links {
         bigserial id PK
@@ -233,10 +241,14 @@ The central relation. Each row represents one atomic unit of agent knowledge.
 | `estimated_tokens` | INTEGER | DEFAULT 0 | Token count under cl100k_base encoding; `chars / 4` approximation on encoder unavailability |
 | `utility_score` | REAL | DEFAULT 1.0 | Composite utility estimate; updated by `MemoryEvaluator` and `MemoryConsolidator` |
 | `verified_at` | TIMESTAMPTZ | DEFAULT NOW() | Timestamp of last quality assessment |
-| `embedding` | vector(1536) | | Dense vector via OpenAI `text-embedding-3-small`; NULL until generated asynchronously |
+| `embedding` | vector(1536) | | Dense vector via OpenAI `text-embedding-3-small`; L2-normalized to unit length before storage; NULL until generated asynchronously |
 | `is_anchor` | BOOLEAN | DEFAULT FALSE | When `TRUE`: exempt from decay, TTL demotion, and expiration deletion |
+| `valid_from` | TIMESTAMPTZ | DEFAULT NOW() | Temporal validity interval start. Lower bound for `asOf` point-in-time queries. |
+| `valid_to` | TIMESTAMPTZ | | Temporal validity interval end. NULL indicates the currently active record. |
+| `superseded_by` | TEXT | | ID of the fragment that supersedes this one. |
+| `last_decay_at` | TIMESTAMPTZ | | Timestamp of most recent decay application. Enables idempotent decay: Δt is computed from this column rather than `created_at`. NULL triggers fallback to `COALESCE(accessed_at, created_at, NOW())`. |
 
-**Index inventory:** `content_hash` (UNIQUE B-tree); `topic` (B-tree); `type` (B-tree); `keywords` (GIN); `importance DESC` (B-tree); `created_at DESC` (B-tree); `agent_id` (B-tree); `linked_to` (GIN); `(ttl_tier, created_at)` (composite B-tree); `source` (B-tree); `verified_at` (B-tree); `is_anchor WHERE is_anchor = TRUE` (partial B-tree).
+**Index inventory:** `content_hash` (UNIQUE B-tree); `topic` (B-tree); `type` (B-tree); `keywords` (GIN); `importance DESC` (B-tree); `created_at DESC` (B-tree); `agent_id` (B-tree); `linked_to` (GIN); `(ttl_tier, created_at)` (composite B-tree); `source` (B-tree); `verified_at` (B-tree); `is_anchor WHERE is_anchor = TRUE` (partial B-tree); `valid_from` (B-tree); `(topic, type) WHERE valid_to IS NULL` (partial B-tree); `id WHERE valid_to IS NULL` (partial UNIQUE).
 
 **HNSW vector index:** Constructed conditionally on `embedding IS NOT NULL`. Parameters: `m = 16` (maximum bidirectional connections per layer), `ef_construction = 64` (dynamic candidate list size during graph construction), distance function `vector_cosine_ops`. This configuration follows the parameter recommendations of Malkov and Yashunin (2018) for moderate-scale approximate nearest-neighbor search, providing logarithmic query complexity O(log n) against brute-force O(n·d) at the cost of bounded recall degradation. The choice of m=16 and ef_construction=64 represents a heuristic default balancing index build time against query recall; operators with distinct recall/latency requirements should tune accordingly.
 
@@ -406,9 +418,19 @@ The `threshold` parameter filters results where computed cosine similarity falls
 
 When `OPENAI_API_KEY` is absent or the embedding API call fails, L3 is unavailable. Fragments stored without embeddings are silently excluded from L3 results; they remain accessible via L1 and L2.
 
-### 4.4 Result Merging and Composite Ranking
+### 4.4 Result Merging: RRF Hybrid Fusion and Composite Ranking
 
-Results from all active tiers are merged and ranked. When the fragment count exceeds `MEMORY_CONFIG.ranking.activationThreshold` (default: 100), composite ranking is applied:
+When the `text` parameter is present, L2 and L3 execute in parallel via `Promise.all` and their results are fused using Reciprocal Rank Fusion (RRF):
+
+```
+rrfScore(f) = Σ_tier weight(tier) / (k + rank_tier(f) + 1)
+```
+
+where `k = 60` (MEMORY_CONFIG.rrfSearch.k) is the denominator stabilization constant and L1 results receive a `l1WeightFactor = 2.0` multiplier over L2/L3 to prioritize exact keyword matches. Fragments appearing only in the L1 tier without content fields (not returned by L2 or L3 queries) are filtered out before the final result set is assembled. The `_rrfScore` internal field is stripped before returning results to MCP clients.
+
+When `text` is absent, the cascade falls back to the sequential L1 → L2 → L3 approach, avoiding the parallel execution overhead.
+
+After RRF fusion, composite ranking is applied when the fragment count exceeds `MEMORY_CONFIG.ranking.activationThreshold` (default: 100):
 
 ```
 rank(f) = importanceWeight × importance(f) + recencyWeight × recency_score(f)
@@ -557,11 +579,12 @@ Executes the three-tier retrieval cascade. Parameters may be combined freely.
 | `keywords` | string[] | L1 Redis Set intersection keys; also applied as L2 filter |
 | `topic` | string | Topic filter applied at all tiers |
 | `type` | string | Type filter applied at all tiers |
-| `text` | string | Natural language query; forces L3 semantic retrieval |
+| `text` | string | Natural language query; forces L3 semantic retrieval and enables parallel L2+L3 execution with RRF merge |
 | `tokenBudget` | number | Maximum cumulative token count. Default: 1000 |
 | `includeLinks` | boolean | Append 1-hop linked neighbors. Default: `true` |
 | `linkRelationType` | string | Edge type filter for linked neighbors. Default: `caused_by`, `resolved_by`, `related` |
 | `threshold` | number | Minimum cosine similarity for L3 results [0.0, 1.0]. L1/L2 results are unaffected. |
+| `asOf` | string | ISO 8601 datetime (e.g., `"2026-01-15T00:00:00Z"`). Enables point-in-time retrieval: returns only fragments where `valid_from ≤ asOf AND (valid_to IS NULL OR valid_to > asOf)`. Useful for auditing knowledge state at a specific historical moment. |
 | `agentId` | string | Agent identifier |
 
 ### 6.4 `forget`
@@ -697,7 +720,7 @@ The consolidation pipeline is an eleven-stage sequential maintenance procedure.
 memory_consolidate
         │
         ├── Stage 1:  TTL tier transitions (hot→warm→cold, anchors exempt)
-        ├── Stage 2:  importance decay (multiplicative, anchors exempt)
+        ├── Stage 2:  importance decay (PostgreSQL POWER() batch SQL, type-specific half-lives, idempotent via last_decay_at, anchors exempt)
         ├── Stage 3:  expired fragment deletion (stale thresholds)
         ├── Stage 4:  deduplication (content_hash collision → merge, retain highest-importance)
         ├── Stage 5:  missing embedding backfill (up to 5 per cycle)
@@ -797,9 +820,26 @@ export const MEMORY_CONFIG = {
     decision  : 90,
     default   : 60
   },
+  halfLifeDays: {
+    // Exponential decay half-lives in days. importance × 2^(−Δt/halfLife).
+    // Δt measured from last_decay_at (idempotent); falls back to accessed_at / created_at.
+    procedure : 30,
+    fact      : 60,
+    decision  : 90,
+    error     : 45,
+    preference: 120,
+    relation  : 90,
+    default   : 60
+  },
+  rrfSearch: {
+    k             : 60,   // RRF denominator constant. Higher k reduces top-rank dominance.
+    l1WeightFactor: 2.0   // Multiplier applied to L1 Redis results for priority injection.
+  },
   linkedFragmentLimit: 10  // Max linked neighbors returned per recall
 };
 ```
+
+`halfLifeDays` controls the exponential decay rate independently of `staleThresholds`; a fragment may still be active (not yet cold) while its importance has already decayed significantly. The `rrfSearch.k = 60` default follows the canonical Cormack, Clarke, and Buettcher (2009) recommendation for web retrieval; domain-specific corpora with tighter rank distributions may benefit from lower values.
 
 ### 10.2 Environment Variables
 
@@ -869,8 +909,23 @@ export const MEMORY_CONFIG = {
 
 ### 11.1 Schema Initialization
 
+**Fresh install:**
+
 ```bash
 psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
+```
+
+**Upgrade from a prior version** (run migrations in order):
+
+```bash
+# Temporal schema: adds valid_from, valid_to, superseded_by columns and indexes
+psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql
+
+# Decay idempotency: adds last_decay_at column
+psql $DATABASE_URL -f lib/memory/migration-002-decay.sql
+
+# One-time L2 normalization of existing embeddings (safe to re-run; idempotent)
+DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js
 ```
 
 The `pgvector` extension must be installed prior to schema initialization:

@@ -50,5 +50,8 @@ desktop.ini
 tmp/
 temp/
 
+# Private Documents (Patent, etc.)
+docs/private/
+docs/plans/
 # Package lock (선택적 — 필요에 따라 주석 해제)
 # package-lock.json
