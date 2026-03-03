@@ -138,7 +138,7 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 | `MemoryManager.js` | Business logic facade. Singleton. Coordinates all memory operations. |
 | `FragmentFactory.js` | Fragment construction, schema validation, keyword extraction, PII masking, TTL inference. |
 | `FragmentStore.js` | PostgreSQL CRUD operations; Redis L1 index synchronization on write. |
-| `FragmentSearch.js` | Three-tier retrieval cascade orchestration (L1 → L2 → L3, RRF hybrid merge). |
+| `FragmentSearch.js` | Three-tier retrieval orchestration (structured: L1→L2; semantic: L1→L2‖L3 RRF merge). |
 | `FragmentIndex.js` | Redis L1 index management (Set operations per keyword). |
 | `MemoryConsolidator.js` | Eleven-stage lifecycle maintenance pipeline (NLI + Gemini CLI hybrid contradiction detection). |
 | `MemoryEvaluator.js` | Asynchronous Gemini CLI quality assessment worker. Singleton. |
@@ -358,40 +358,37 @@ Resources allow the AI to retrieve real-time state information of the memory sys
 
 ![Retrieval Flow](assets/images/retrieval.png)
 
-Fragment retrieval executes as a cascading, cost-ordered search. Tiers are evaluated in ascending computational cost; a tier is skipped when the preceding tier yields a result set of sufficient cardinality.
+Fragment retrieval is query-adaptive: the execution path branches on whether a `text` (semantic) parameter is present, preserving fast cascade behavior for structured queries while applying parallel execution and RRF fusion for semantic queries.
 
 ```
 recall(keywords, topic, type, text, ...)
           │
           ▼
 ┌─────────────────────────────────────────┐
-│  L1: Redis SINTER                       │
+│  L1: Redis SINTER (always runs first)   │
 │  keys: keywords:<kw> (Set per keyword)  │
 │  op:   SINTER → fragment ID set         │
 │  cost: O(N·K), in-memory, sub-ms        │
 └──────────────┬──────────────────────────┘
-               │ insufficient results?
-               ▼
-┌─────────────────────────────────────────┐
-│  L2: PostgreSQL GIN Array Query         │
-│  op:  keywords && ARRAY[...]            │
-│  idx: GIN on fragments.keywords         │
-│  cost: index scan, ms range             │
-└──────────────┬──────────────────────────┘
-               │ text param present, or still insufficient?
-               ▼
-┌─────────────────────────────────────────┐
-│  L3: pgvector HNSW Cosine Similarity    │
-│  op:  embedding <=> $query_vector       │
-│  idx: HNSW (m=16, ef_construction=64)   │
-│  cost: O(log n), ~ms range              │
-└──────────────┬──────────────────────────┘
                │
-               ▼
-        Merge + Composite Rank
-        → tokenBudget enforcement
-        → includeLinks (1-hop)
-        → return fragments
+       ┌───────┴────────────────┐
+       │ text param?            │
+       │ No (structured query)  │ Yes (semantic query)
+       ▼                        ▼
+┌────────────┐        ┌─────────────────────────────┐
+│ L2: PG GIN │        │ L2 ‖ L3  (Promise.all)      │
+│ (sequential│        │ L2: PostgreSQL GIN           │
+│  after L1) │        │ L3: Embed + HNSW cosine      │
+└─────┬──────┘        │ (L2 latency absorbed by L3)  │
+      │               └────────────┬────────────────┘
+      │                            │ RRF Fusion
+      │                            │ w_L1=2.0, k=60
+      └──────────────┬─────────────┘
+                     ▼
+              Merge + Composite Rank
+              → tokenBudget enforcement
+              → includeLinks (1-hop)
+              → return fragments
 ```
 
 ### 4.1 L1: Redis Set Intersection
@@ -400,11 +397,11 @@ Upon fragment creation, `FragmentIndex` synchronously updates one Redis Set per 
 
 ### 4.2 L2: PostgreSQL GIN-Indexed Array Query
 
-When L1 yields insufficient results, retrieval escalates to L2. The `keywords` column carries a Generalized Inverted Index (GIN), enabling the array overlap operator `keywords && ARRAY[...]` to execute as an index scan. GIN indexes decompose each array into constituent elements and maintain posting lists per element; the overlap operator resolves to a set intersection over posting lists, returning rows containing at least one matching keyword. No sequential scan is performed.
+L2 always executes after L1, regardless of L1 result count. The `keywords` column carries a Generalized Inverted Index (GIN), enabling the array overlap operator `keywords && ARRAY[...]` to execute as an index scan. GIN indexes decompose each array into constituent elements and maintain posting lists per element; the overlap operator resolves to a set intersection over posting lists, returning rows containing at least one matching keyword. No sequential scan is performed. L1 results are augmented with L2 results rather than L2 being a fallback gated on L1 failure.
 
 ### 4.3 L3: pgvector HNSW Cosine Similarity Search
 
-L3 is invoked when the `text` parameter is present, explicitly requesting semantic retrieval, or when L1 and L2 together yield insufficient results. The query text is encoded via the OpenAI Embeddings API (`text-embedding-3-small`, 1536 dimensions) and the resulting dense vector is issued against the HNSW index:
+L3 is invoked exclusively when the `text` parameter is present and an embedding API key is configured. Insufficient L1/L2 result count alone does not trigger L3. The query text is encoded via the OpenAI Embeddings API (`text-embedding-3-small`, 1536 dimensions) and the resulting dense vector is issued against the HNSW index:
 
 ```sql
 SELECT *, 1 - (embedding <=> $1) AS similarity
@@ -428,7 +425,7 @@ rrfScore(f) = Σ_tier weight(tier) / (k + rank_tier(f) + 1)
 
 where `k = 60` (MEMORY_CONFIG.rrfSearch.k) is the denominator stabilization constant and L1 results receive a `l1WeightFactor = 2.0` multiplier over L2/L3 to prioritize exact keyword matches. Fragments appearing only in the L1 tier without content fields (not returned by L2 or L3 queries) are filtered out before the final result set is assembled. The `_rrfScore` internal field is stripped before returning results to MCP clients.
 
-When `text` is absent, the cascade falls back to the sequential L1 → L2 → L3 approach, avoiding the parallel execution overhead.
+When `text` is absent (structured query using keywords/topic/type only), L3 is not invoked. The response is assembled from L1 and L2 results only, preserving the low-latency path.
 
 After RRF fusion, composite ranking is applied when the fragment count exceeds `MEMORY_CONFIG.ranking.activationThreshold` (default: 100):
 
