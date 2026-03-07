@@ -3,7 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-02-25
- * 수정일: 2026-03-07 (contextInjection 스마트 캡, pagination 설정 추가)
+ * 수정일: 2026-03-07 (GC 정책, contextInjection 스마트 캡, pagination 설정 추가)
  */
 
 export const MEMORY_CONFIG = {
@@ -68,5 +68,16 @@ export const MEMORY_CONFIG = {
   pagination: {
     defaultPageSize : 20,
     maxPageSize     : 50
+  },
+  /** 파편 GC 정책 */
+  gc: {
+    utilityThreshold       : 0.15,
+    gracePeriodDays        : 7,
+    inactiveDays           : 60,
+    maxDeletePerCycle      : 50,
+    factDecisionPolicy     : {
+      importanceThreshold  : 0.2,
+      orphanAgeDays        : 30
+    }
   }
 };
