@@ -20,7 +20,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 /** 설정 */
-import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR } from "./lib/config.js";
+import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from "./lib/config.js";
+
+/** Rate Limiting */
+import { RateLimiter } from "./lib/rate-limiter.js";
 
 /** 메트릭 */
 import {
@@ -73,6 +76,13 @@ import { saveAccessStats } from "./lib/tools/index.js";
 import { shutdownPool, getPoolStats, getPrimaryPool } from "./lib/tools/db.js";
 import { redisClient } from "./lib/redis.js";
 import { getMemoryEvaluator } from "./lib/memory/MemoryEvaluator.js";
+
+/** Rate Limiter 인스턴스 */
+const rateLimiter          = new RateLimiter({
+  windowMs:    RATE_LIMIT_WINDOW_MS,
+  maxRequests: RATE_LIMIT_MAX_REQUESTS
+});
+setInterval(() => rateLimiter.cleanup(), 5 * 60_000).unref();
 
 /** EmbeddingWorker 인스턴스 (서버 시작 후 초기화) */
 let globalEmbeddingWorker  = null;
@@ -170,13 +180,27 @@ const server               = http.createServer(async (req, res) => {
     res.setHeader("Access-Control-Allow-Origin", req.headers.origin || "*");
     res.setHeader("Access-Control-Expose-Headers", "MCP-Session-Id");
 
+    const clientIp = req.headers["x-forwarded-for"]?.split(",")[0]?.trim()
+                  || req.socket.remoteAddress
+                  || "unknown";
+
+    if (!rateLimiter.allow(clientIp)) {
+      res.writeHead(429, { "Retry-After": String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)) });
+      res.end(JSON.stringify(jsonRpcError(null, -32000, "Too many requests")));
+      return;
+    }
+
     let sessionId          = req.headers["mcp-session-id"] || url.searchParams.get("sessionId") || url.searchParams.get("mcp-session-id");
     let sessionKeyId       = null;
     let msg;
 
     try {
       msg                  = await readJsonBody(req);
-    } catch {
+    } catch (err) {
+      if (err.statusCode === 413) {
+        await sendJSON(res, 413, jsonRpcError(null, -32000, "Payload too large"), req);
+        return;
+      }
       await sendJSON(res, 400, jsonRpcError(null, -32700, "Parse error"), req);
       return;
     }
@@ -396,7 +420,12 @@ const server               = http.createServer(async (req, res) => {
     let msg;
     try {
       msg                  = await readJsonBody(req);
-    } catch {
+    } catch (err) {
+      if (err.statusCode === 413) {
+        res.statusCode     = 413;
+        res.end("Payload too large");
+        return;
+      }
       res.statusCode       = 400;
       res.end("Invalid JSON");
       return;
@@ -699,6 +728,11 @@ const server               = http.createServer(async (req, res) => {
         res.statusCode = 201;
         res.end(JSON.stringify(key));
       } catch (err) {
+        if (err.statusCode === 413) {
+          res.statusCode = 413;
+          res.end(JSON.stringify({ error: "Payload too large" }));
+          return;
+        }
         console.error("[Admin] createApiKey error:", err.message);
         res.statusCode = err.message.includes("unique") ? 409 : 500;
         res.end(JSON.stringify({ error: err.message }));
@@ -715,6 +749,11 @@ const server               = http.createServer(async (req, res) => {
         res.statusCode = 200;
         res.end(JSON.stringify(result));
       } catch (err) {
+        if (err.statusCode === 413) {
+          res.statusCode = 413;
+          res.end(JSON.stringify({ error: "Payload too large" }));
+          return;
+        }
         console.error("[Admin] updateApiKeyStatus error:", err.message);
         res.statusCode = err.message === "Key not found" ? 404 : 400;
         res.end(JSON.stringify({ error: err.message }));
