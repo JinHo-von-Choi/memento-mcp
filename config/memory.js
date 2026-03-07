@@ -3,7 +3,7 @@
  *
  * 작성자: 최진호
  * 작성일: 2026-02-25
- * 수정일: 2026-03-03 (halfLife 감쇠 설정 추가, RRF 검색 설정 추가)
+ * 수정일: 2026-03-07 (contextInjection 스마트 캡, pagination 설정 추가)
  */
 
 export const MEMORY_CONFIG = {
@@ -50,5 +50,23 @@ export const MEMORY_CONFIG = {
     retryLimit  : 3,
     retryDelayMs: 2000,
     queueKey    : "memento:embedding_queue"
+  },
+  /** 컨텍스트 주입 설정 */
+  contextInjection: {
+    maxCoreFragments   : 15,
+    maxWmFragments     : 10,
+    typeSlots          : {
+      preference : 5,
+      error      : 5,
+      procedure  : 5,
+      decision   : 3,
+      fact       : 3
+    },
+    defaultTokenBudget : 2000
+  },
+  /** recall 페이지네이션 설정 */
+  pagination: {
+    defaultPageSize : 20,
+    maxPageSize     : 50
   }
 };
