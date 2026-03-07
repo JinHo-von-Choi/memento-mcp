@@ -7,7 +7,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "backfill:embeddings": "node lib/memory/backfill-embeddings.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",
