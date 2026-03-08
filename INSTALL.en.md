@@ -1,5 +1,17 @@
 # Installation Guide
 
+## Quick Start (Interactive Setup Script)
+
+```bash
+bash setup.sh
+```
+
+Guides you through `.env` creation, `npm install`, and DB schema setup step by step.
+
+---
+
+## Manual Installation
+
 ## Dependencies
 
 ```bash
