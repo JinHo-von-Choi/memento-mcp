@@ -1294,6 +1294,8 @@ psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
 # fragment_links constraint: adds superseded_by to relation_type CHECK
 psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
 
+> **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
+
 # For models with >2000 dimensions (e.g., Gemini gemini-embedding-001 at 3072 dims) only:
 # Converts the embedding column to halfvec type (pgvector ≥0.7.0 required)
 # EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL \
@@ -1345,6 +1347,40 @@ Store the access key in an environment variable; do not commit plaintext credent
 ```
 
 For external access, expose the service through a reverse proxy (TLS termination, rate limiting). Do not publish internal host addresses or port numbers in external documentation.
+
+#### Getting More Out of Memento — Hook-Based Context Loading
+
+Memento's `instructions` field encourages the AI to use memory tools actively, but this alone doesn't automatically inject past memories at session start. With Claude Code hooks, you can ensure the AI loads relevant context at the beginning of every session.
+
+**Auto-load Core Memory on session start** (`~/.claude/settings.json`):
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+Alternatively, add the following to your `CLAUDE.md` to have the AI load context on its own:
+
+```markdown
+## Session Start Rules
+- At the start of every conversation, call the `context` tool to load Core Memory and Working Memory.
+- Before debugging or writing code, call `recall(keywords=[relevant_keywords], type="error")` to surface related past learnings.
+```
+
+`context` returns only high-importance fragments within your token budget, so it injects critical information without polluting the context window. Combining session hooks with `CLAUDE.md` instructions significantly reduces the "amnesia effect" where the AI behaves as if meeting you for the first time each session.
 
 ### 11.4 MCP Protocol Version Negotiation
 
