@@ -1,6 +1,6 @@
 {
   "name": "memento-mcp",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "license": "Apache-2.0",
   "description": "Fragment-Based Memory MCP Server",
   "main": "server.js",
@@ -23,6 +23,7 @@
     "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
-    "eslint": "^9.0.0"
+    "eslint": "^9.0.0",
+    "jest": "^30.2.0"
   }
 }
