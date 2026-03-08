@@ -10,7 +10,7 @@
 
 CREATE SCHEMA IF NOT EXISTS agent_memory;
 
-SET search_path TO agent_memory, nerdvana, public;
+SET search_path TO agent_memory, public;
 
 -- 파편(Fragment) 테이블
 CREATE TABLE IF NOT EXISTS agent_memory.fragments (
@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS agent_memory.fragments (
     estimated_tokens INTEGER DEFAULT 0,
     utility_score    REAL DEFAULT 1.0,
     verified_at      TIMESTAMPTZ DEFAULT NOW(),
+    -- 차원 변경 시 migration-007-flexible-embedding-dims.js 실행 (EMBEDDING_DIMENSIONS 환경변수 참조)
+    -- >2000차원 모델(Gemini gemini-embedding-001 등)은 halfvec 타입으로 자동 전환됨 (pgvector ≥0.7.0 필요)
     embedding        vector(1536)
 );
 
@@ -140,9 +142,10 @@ ALTER TABLE agent_memory.fragments ENABLE ROW LEVEL SECURITY;
 -- 에이전트 격리 정책: 세션 변수 'app.current_agent_id'와 일치하는 데이터만 접근 허용
 -- agent_id가 'default'인 경우는 공용 데이터로 간주하여 조회 허용
 -- 'system' 또는 'admin' 세션은 모든 데이터에 접근 허용 (유지보수용)
+DROP POLICY IF EXISTS fragment_isolation_policy ON agent_memory.fragments;
 CREATE POLICY fragment_isolation_policy ON agent_memory.fragments
     USING (
-        agent_id = current_setting('app.current_agent_id', true) 
+        agent_id = current_setting('app.current_agent_id', true)
         OR agent_id = 'default'
         OR current_setting('app.current_agent_id', true) IN ('system', 'admin')
     );
