@@ -141,7 +141,7 @@ AI가 시스템을 더 잘 이해하고 활용할 수 있도록 돕는다.
 
 기억을 찾을 때 세 개의 레이어를 순서대로 두드린다. 빠른 층에서 답이 나오면 느린 층은 건드리지 않는다.
 
-![검색 흐름](assets/images/retrieval.png)
+![검색 흐름](assets/images/retrieval_flow.svg)
 
 ![토큰 효율성](assets/images/token-efficiency.png)
 
@@ -161,7 +161,7 @@ Redis와 OpenAI는 선택 사항이다. 없으면 해당 레이어 없이 작동
 
 파편은 사용 빈도에 따라 `hot`, `warm`, `cold`, `permanent` 사이를 이동한다.
 
-![파편 생명주기](assets/images/lifecycle.png)
+![파편 생명주기](assets/images/fragment_lifecycle.svg)
 
 ```
 hot (자주 참조됨) → warm (한동안 침묵) → cold (오래 잠듦) → TTL 만료 시 삭제
@@ -296,7 +296,7 @@ MCP 클라이언트 설정에 아래를 추가하면 된다.
 
 ## 10. 시스템 구조
 
-![시스템 아키텍처](assets/images/architecture.png)
+![시스템 아키텍처](assets/images/memento_architecture.svg)
 
 ---
 
@@ -325,7 +325,7 @@ MCP 클라이언트 설정에 아래를 추가하면 된다.
 
 중요도 감쇠는 PostgreSQL `POWER()` 하나짜리 SQL로 배치 처리됨. 공식: `importance × 2^(−Δt/반감기)`. 유형마다 반감기가 다름 (procedure=30일, fact=60일, decision=90일, error=45일, preference=120일). `last_decay_at` 컬럼으로 마지막 감쇠 시각을 기록해서 같은 날 두 번 돌려도 이중 감쇠 안 일어남.
 
-![유지보수 사이클](assets/images/maintenance-cycle.png)
+![유지보수 사이클](assets/images/contradiction_detection.svg)
 
 </details>
 

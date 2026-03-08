@@ -112,7 +112,7 @@ The system decomposes into three structural layers: the HTTP transport layer, th
 
 ### 2.1 System Architecture Diagram
 
-![System Architecture](assets/images/architecture.png)
+![System Architecture](assets/images/memento_architecture.svg)
 
 ### 2.2 HTTP Transport Layer
 
@@ -379,7 +379,7 @@ Resources allow the AI to retrieve real-time state information of the memory sys
 
 ### 6.1 Retrieval Flow Diagram
 
-![Retrieval Flow](assets/images/retrieval.png)
+![Retrieval Flow](assets/images/retrieval_flow.svg)
 
 Fragment retrieval is query-adaptive: the execution path branches on whether a `text` (semantic) parameter is present, preserving fast cascade behavior for structured queries while applying parallel execution and RRF fusion for semantic queries.
 
@@ -488,7 +488,7 @@ Three further observations merit attention. First, the HNSW index parameters (m=
 
 ### 5.1 Lifecycle State Transition Diagram
 
-![Fragment Lifecycle](assets/images/lifecycle.png)
+![Fragment Lifecycle](assets/images/fragment_lifecycle.svg)
 
 ### 5.2 Scope vs. TTL Tier: A Critical Distinction
 
