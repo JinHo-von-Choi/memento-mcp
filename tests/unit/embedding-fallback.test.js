@@ -2,9 +2,9 @@ import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 
 describe("embedding fallback path", () => {
-  test("FragmentStore.generateMissingEmbeddings가 함수이다", async () => {
-    const { FragmentStore } = await import("../../lib/memory/FragmentStore.js");
-    const store = new FragmentStore();
-    assert.strictEqual(typeof store.generateMissingEmbeddings, "function");
+  test("EmbeddingWorker.processOrphanFragments가 함수이다", async () => {
+    const { EmbeddingWorker } = await import("../../lib/memory/EmbeddingWorker.js");
+    const worker = new EmbeddingWorker();
+    assert.strictEqual(typeof worker.processOrphanFragments, "function");
   });
 });
