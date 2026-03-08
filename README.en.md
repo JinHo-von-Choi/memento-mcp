@@ -152,6 +152,10 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 | `migration-002-decay.sql` | Schema migration: adds `last_decay_at` column for idempotent decay tracking. |
 | `migration-003-api-keys.sql` | Schema migration: creates `api_keys` and `api_key_usage` tables for API key management. |
 | `migration-004-key-isolation.sql` | Schema migration: adds `key_id` column to `fragments` for per-API-key memory isolation. |
+| `migration-005-gc-columns.sql` | Schema migration: adds auxiliary indexes on `utility_score` and `access_count` to reinforce GC policy queries. |
+| `migration-006-superseded-by-constraint.sql` | Schema migration: extends `fragment_links.relation_type` CHECK to include `superseded_by`. |
+| `migration-007-flexible-embedding-dims.js` | Schema migration script: converts the `embedding` column to `halfvec(N)` for models with >2000 dimensions (pgvector ≥0.7.0 required). Run with `EMBEDDING_DIMENSIONS=<N>`. |
+| `backfill-embeddings.js` | One-time script to regenerate embeddings for all fragments lacking them; use after a provider or dimension change. |
 
 **Admin module:**
 
@@ -174,6 +178,9 @@ Supporting infrastructure modules:
 | `lib/logger.js` | Winston structured logger with daily log rotation |
 | `lib/rate-limiter.js` | IP-based sliding window rate limiter |
 | `lib/utils.js` | Origin validation, JSON body parsing (2MB limit), SSE framing |
+| `lib/tools/db-tools.js` | MCP DB tool handlers (separated from `lib/tools/db.js`) |
+| `lib/http/helpers.js` | HTTP SSE/request helpers |
+| `lib/logging/audit.js` | Audit and access logging |
 
 External configuration: `config/memory.js` exports `MEMORY_CONFIG`, a module-level constant governing composite ranking weights and stale detection thresholds, decoupled from server source to permit adjustment without code modification.
 
@@ -912,10 +919,13 @@ export const MEMORY_CONFIG = {
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OPENAI_API_KEY` | (empty) | OpenAI API key for embedding generation. When using Ollama or other compatible local servers, set to any non-empty string (e.g. `ollama`). |
-| `EMBEDDING_BASE_URL` | (empty) | Custom OpenAI-compatible endpoint. E.g. `http://localhost:11434/v1` for Ollama. |
-| `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model identifier |
-| `EMBEDDING_DIMENSIONS` | `1536` | Embedding dimensionality. Must match `vector(N)` in the schema. |
-| `GEMINI_API_KEY` | (empty) | Google Gemini API key for legacy API mode. Gemini CLI is preferred when installed; this key is used as fallback. |
+| `EMBEDDING_PROVIDER` | `openai` | Embedding provider: `openai` (default) \| `gemini` \| `ollama` \| `localai` \| `custom`. Model, dimensions, and base URL are automatically set to provider defaults when this is set. |
+| `EMBEDDING_API_KEY` | (empty) | Generic embedding API key. Falls back to `OPENAI_API_KEY` or `GEMINI_API_KEY` depending on provider. |
+| `EMBEDDING_BASE_URL` | (empty) | Custom OpenAI-compatible endpoint. E.g. `http://localhost:11434/v1` for Ollama. Automatically set for known providers. |
+| `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model identifier. Provider default is used when `EMBEDDING_PROVIDER` is set and this is omitted. |
+| `EMBEDDING_DIMENSIONS` | `1536` | Embedding dimensionality. Must match `vector(N)` in the schema. Provider default is used when `EMBEDDING_PROVIDER` is set and this is omitted. |
+| `EMBEDDING_SUPPORTS_DIMS_PARAM` | (provider default) | Whether to send the `dimensions` parameter to the embedding API. Auto-determined from the provider; override only when using a custom-compatible server with non-standard behavior. |
+| `GEMINI_API_KEY` | (empty) | Google Gemini API key. Used when `EMBEDDING_PROVIDER=gemini` and also as fallback for Gemini CLI operations. |
 
 **NLI model:** The NLI classifier (`@huggingface/transformers` + ONNX Runtime) requires no API key. The mDeBERTa model (~280MB ONNX) is downloaded automatically on first use and cached locally. No GPU is required; inference runs on CPU via ONNX Runtime.
 
@@ -925,13 +935,21 @@ export const MEMORY_CONFIG = {
 
 ## 10.3 Embedding Service Configuration
 
-Embeddings power L3 semantic search and automatic fragment linking. The default is OpenAI `text-embedding-3-small`. You can switch providers using environment variables alone (OpenAI-compatible servers) or by replacing the `generateEmbedding` function in `lib/tools/embedding.js` (proprietary APIs).
+Embeddings power L3 semantic search and automatic fragment linking. The default provider is OpenAI `text-embedding-3-small`.
 
-> **Dimension change warning:** Changing `EMBEDDING_DIMENSIONS` requires recreating the PostgreSQL schema and regenerating all embeddings. Re-run `node lib/memory/normalize-vectors.js` after migration.
+Set `EMBEDDING_PROVIDER` to switch providers. Model, dimensions, and base URL are automatically set to provider defaults; override with individual environment variables only when needed. For providers that are not OpenAI-compatible (Cohere, Voyage AI, etc.), replace the `generateEmbedding` function in `lib/tools/embedding.js` directly.
+
+> **Dimension change warning:** Changing `EMBEDDING_DIMENSIONS` requires recreating the PostgreSQL schema and regenerating all embeddings. Run `migration-007` and `backfill-embeddings.js` after the switch (see the Gemini section below for an example).
+
+> **halfvec support:** For models with >2000 dimensions (e.g., Gemini's 3072-dim `gemini-embedding-001`), `migration-007` converts the `embedding` column to `halfvec` type, which supports HNSW indexing up to 4000 dimensions (requires pgvector ≥0.7.0).
+
+See `.env.example` for a configuration template.
 
 ---
 
-### OpenAI (default)
+### Switching Embedding Providers
+
+#### OpenAI (default)
 
 ```env
 OPENAI_API_KEY=sk-...
@@ -947,7 +965,30 @@ EMBEDDING_DIMENSIONS=1536
 
 ---
 
-### Ollama (local, free)
+#### Google Gemini (`gemini-embedding-001`, 3072 dims)
+
+`text-embedding-004` was discontinued on January 14, 2026. The current recommended model is `gemini-embedding-001` (3072 dimensions).
+
+```env
+EMBEDDING_PROVIDER=gemini
+GEMINI_API_KEY=AIza...
+```
+
+First-time switch to 3072 dims requires `migration-007` to convert the `embedding` column to `halfvec` type (pgvector ≥0.7.0 required), followed by a full re-embedding pass:
+
+```bash
+EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL \
+  node lib/memory/migration-007-flexible-embedding-dims.js
+DATABASE_URL=$DATABASE_URL node lib/memory/backfill-embeddings.js
+```
+
+| Model | Dimensions | Notes |
+|-------|------------|-------|
+| gemini-embedding-001 | 3072 | Current recommended model. High precision. |
+
+---
+
+#### Ollama (local, free)
 
 Ollama exposes a `/v1/embeddings` OpenAI-compatible endpoint. No code changes required.
 
@@ -971,7 +1012,7 @@ EMBEDDING_DIMENSIONS=768
 
 ---
 
-### LocalAI (local, OpenAI-compatible)
+#### LocalAI (local, OpenAI-compatible)
 
 ```env
 OPENAI_API_KEY=localai
@@ -982,7 +1023,7 @@ EMBEDDING_DIMENSIONS=1536
 
 ---
 
-### LM Studio (local, OpenAI-compatible)
+#### LM Studio (local, OpenAI-compatible)
 
 Enable the Local Server in LM Studio, load an embedding model, then:
 
@@ -995,7 +1036,7 @@ EMBEDDING_DIMENSIONS=768
 
 ---
 
-### llama.cpp server (local, OpenAI-compatible)
+#### llama.cpp server (local, OpenAI-compatible)
 
 ```bash
 ./llama-server -m nomic-embed-text-v1.5.Q4_K_M.gguf --embedding --port 8080
@@ -1010,7 +1051,7 @@ EMBEDDING_DIMENSIONS=768
 
 ---
 
-### Proprietary APIs (custom adapter required)
+### Proprietary APIs (custom adapter required, code replacement)
 
 Cohere, Voyage AI, Gemini, Mistral, Jina AI, and Nomic either have non-OpenAI-compatible APIs or require specific request structures. Replace the `generateEmbedding` function in `lib/tools/embedding.js` with the snippet for your provider.
 
@@ -1215,7 +1256,7 @@ EMBEDDING_DIMENSIONS=768
 | llama.cpp | Variable | Env vars only | Free (local) |
 | Cohere embed-v4.0 | 1536 | Code replacement | No |
 | Voyage AI voyage-3.5 | 1024 | Code replacement | No |
-| Google Gemini text-embedding-004 | 768 | Code replacement | Limited |
+| Google Gemini gemini-embedding-001 | 3072 | Env vars only (`EMBEDDING_PROVIDER=gemini`) | Limited |
 | Mistral mistral-embed | 1024 | Code replacement | No |
 | Jina jina-embeddings-v3 | 1024 | Code replacement | 1M tokens/mo |
 | Nomic nomic-embed-text-v1.5 | 768 | Code replacement | 1M tokens/mo |
@@ -1247,6 +1288,18 @@ psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql
 # API key isolation: adds key_id column to fragments
 psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql
 
+# GC policy reinforcement: adds auxiliary indexes on utility_score and access_count
+psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
+
+# fragment_links constraint: adds superseded_by to relation_type CHECK
+psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
+
+# For models with >2000 dimensions (e.g., Gemini gemini-embedding-001 at 3072 dims) only:
+# Converts the embedding column to halfvec type (pgvector ≥0.7.0 required)
+# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL \
+#   node lib/memory/migration-007-flexible-embedding-dims.js
+# DATABASE_URL=$DATABASE_URL node lib/memory/backfill-embeddings.js
+
 # One-time L2 normalization of existing embeddings (safe to re-run; idempotent)
 DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js
 ```
@@ -1261,7 +1314,10 @@ Verify with `\dx` in psql. The HNSW index requires pgvector 0.5.0 or later.
 
 ### 11.2 Server Startup
 
+Copy `.env.example` to `.env` as a starting point for environment variable configuration, then edit as needed.
+
 ```bash
+cp .env.example .env
 npm install
 node server.js
 ```
