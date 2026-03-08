@@ -6,9 +6,35 @@
   <a href="https://lobehub.com/mcp/jinho-von-choi-memento-mcp">
     <img src="https://lobehub.com/badge/mcp/jinho-von-choi-memento-mcp" alt="MCP Badge" />
   </a>
+  <a href="https://github.com/JinHo-von-Choi/memento-mcp/releases">
+    <img src="https://img.shields.io/github/v/release/JinHo-von-Choi/memento-mcp?style=flat&label=release&color=4c8bf5" alt="GitHub Release" />
+  </a>
+  <a href="https://github.com/JinHo-von-Choi/memento-mcp/stargazers">
+    <img src="https://img.shields.io/github/stars/JinHo-von-Choi/memento-mcp?style=flat&color=f5c542" alt="GitHub Stars" />
+  </a>
+  <a href="https://github.com/JinHo-von-Choi/memento-mcp/issues">
+    <img src="https://img.shields.io/github/issues/JinHo-von-Choi/memento-mcp?style=flat&color=e05d44" alt="GitHub Issues" />
+  </a>
+  <a href="https://github.com/JinHo-von-Choi/memento-mcp/commits/main">
+    <img src="https://img.shields.io/github/last-commit/JinHo-von-Choi/memento-mcp?style=flat&color=brightgreen" alt="Last Commit" />
+  </a>
+  <a href="LICENSE">
+    <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat" alt="License" />
+  </a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Node.js-%3E%3D20-339933?style=flat&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/PostgreSQL-pgvector%20HNSW-4169E1?style=flat&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Redis-L1%20Cache-DC382D?style=flat&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/MCP-2025--11--25-7c3aed?style=flat" alt="MCP Protocol" />
+  <img src="https://img.shields.io/badge/transport-Streamable%20HTTP%20%7C%20SSE-0ea5e9?style=flat" alt="Transport" />
+  <img src="https://img.shields.io/badge/auth-OAuth%202.0%20PKCE-f59e0b?style=flat" alt="Auth" />
 </p>
 
 # Memento MCP: A Fragment-Based Persistent Memory Subsystem for Stateless Language Model Agents
+
+**[Installation Guide →](INSTALL.en.md)**
 
 ---
 
@@ -1265,133 +1291,7 @@ EMBEDDING_DIMENSIONS=768
 
 ## 11. Deployment
 
-### 11.1 Schema Initialization
-
-**Fresh install:**
-
-```bash
-psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
-```
-
-**Upgrade from a prior version** (run migrations in order):
-
-```bash
-# Temporal schema: adds valid_from, valid_to, superseded_by columns and indexes
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql
-
-# Decay idempotency: adds last_decay_at column
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql
-
-# API key management: creates api_keys and api_key_usage tables
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql
-
-# API key isolation: adds key_id column to fragments
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql
-
-# GC policy reinforcement: adds auxiliary indexes on utility_score and access_count
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
-
-# fragment_links constraint: adds superseded_by to relation_type CHECK
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
-
-> **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
-
-# For models with >2000 dimensions (e.g., Gemini gemini-embedding-001 at 3072 dims) only:
-# Converts the embedding column to halfvec type (pgvector ≥0.7.0 required)
-# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL \
-#   node lib/memory/migration-007-flexible-embedding-dims.js
-# DATABASE_URL=$DATABASE_URL node lib/memory/backfill-embeddings.js
-
-# One-time L2 normalization of existing embeddings (safe to re-run; idempotent)
-DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js
-```
-
-The `pgvector` extension must be installed prior to schema initialization:
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-Verify with `\dx` in psql. The HNSW index requires pgvector 0.5.0 or later.
-
-### 11.2 Server Startup
-
-Copy `.env.example` to `.env` as a starting point for environment variable configuration, then edit as needed.
-
-```bash
-cp .env.example .env
-npm install
-node server.js
-```
-
-On startup, the server logs the listening port, authentication status, session TTL, confirms `MemoryEvaluator` worker initialization, and begins NLI model preloading in the background (~30s on first download, ~1-2s from cache). Graceful shutdown on `SIGTERM` / `SIGINT` triggers `AutoReflect` for all active sessions, stops `MemoryEvaluator`, drains the PostgreSQL connection pool, and flushes access statistics.
-
-**Note on ONNX Runtime and CUDA:** On systems with CUDA 11 installed, `npm install` may fail during `onnxruntime-node` post-install. Use `npm install --onnxruntime-node-install-cuda=skip` to force CPU-only mode. This project does not require GPU acceleration.
-
-### 11.3 MCP Client Configuration
-
-Store the access key in an environment variable; do not commit plaintext credentials.
-
-```json
-{
-  "mcpServers": {
-    "memento": {
-      "type": "http",
-      "url": "http://localhost:57332/mcp",
-      "headers": {
-        "Authorization": "Bearer ${MEMENTO_ACCESS_KEY}"
-      }
-    }
-  }
-}
-```
-
-For external access, expose the service through a reverse proxy (TLS termination, rate limiting). Do not publish internal host addresses or port numbers in external documentation.
-
-#### Getting More Out of Memento — Hook-Based Context Loading
-
-Memento's `instructions` field encourages the AI to use memory tools actively, but this alone doesn't automatically inject past memories at session start. With Claude Code hooks, you can ensure the AI loads relevant context at the beginning of every session.
-
-**Auto-load Core Memory on session start** (`~/.claude/settings.json`):
-
-```json
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "curl -s -X POST http://localhost:57332/mcp -H 'Authorization: Bearer YOUR_KEY' -H 'Content-Type: application/json' -H 'mcp-session-id: ${MCP_SESSION_ID}' -d '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"context\",\"arguments\":{}}}'"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-Alternatively, add the following to your `CLAUDE.md` to have the AI load context on its own:
-
-```markdown
-## Session Start Rules
-- At the start of every conversation, call the `context` tool to load Core Memory and Working Memory.
-- Before debugging or writing code, call `recall(keywords=[relevant_keywords], type="error")` to surface related past learnings.
-```
-
-`context` returns only high-importance fragments within your token budget, so it injects critical information without polluting the context window. Combining session hooks with `CLAUDE.md` instructions significantly reduces the "amnesia effect" where the AI behaves as if meeting you for the first time each session.
-
-### 11.4 MCP Protocol Version Negotiation
-
-| Version | Notable Additions |
-|---------|------------------|
-| `2025-11-25` | Tasks abstraction, long-running operation support |
-| `2025-06-18` | Structured tool output, server-driven interaction |
-| `2025-03-26` | OAuth 2.1, Streamable HTTP transport |
-| `2024-11-05` | Initial release; Legacy SSE transport |
-
-The server advertises all four versions. Clients negotiate the highest mutually supported version during `initialize`.
+See **[INSTALL.en.md](INSTALL.en.md)** for full installation, migration, client configuration, and hook setup instructions.
 
 ---
 
