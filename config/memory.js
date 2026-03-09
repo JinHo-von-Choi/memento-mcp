@@ -95,5 +95,22 @@ export const MEMORY_CONFIG = {
       maxAgeDays           : 30,
       maxImportance        : 0.3
     }
+  },
+  /** 긴 파편 분할 정책 (Gemini CLI 사용) */
+  fragmentSplit: {
+    lengthThreshold  : 300,   // 이 길이(자) 초과 파편을 분할 대상으로 선정
+    batchSize        : 10,    // 한 사이클에 처리할 최대 파편 수
+    minItems         : 2,     // Gemini가 최소 이 수 이상 항목으로 분리해야 원본 대체
+    maxItems         : 8,     // Gemini에 요청할 최대 분리 항목 수
+    timeoutMs        : 30_000 // 파편당 Gemini 타임아웃
+  },
+  /** 형태소 사전 및 L3 fallback 설정 */
+  morphemeIndex: {
+    fallbackThreshold : 2,        // L3 결과가 이 수 이하일 때 형태소 fallback 실행
+    fallbackLimit     : 5,        // fallback 최대 반환 파편 수
+    minSimilarity     : 0.15,     // fallback 최소 유사도 (L3보다 낮게 설정)
+    maxMorphemes      : 10,       // 쿼리에서 추출할 최대 형태소 수
+    geminiTimeoutMs   : 15_000,   // 형태소 분리 Gemini 타임아웃
+    registerOnRemember: true      // remember() 시 형태소 자동 등록 여부
   }
 };
