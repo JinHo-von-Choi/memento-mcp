@@ -242,7 +242,7 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
     success "Schema applied."
   else
     info "Running migrations..."
-    for i in 001 002 003 004 005 006; do
+    for i in 001 002 003 004 005 006 007 008; do
       f="lib/memory/migration-${i}-"*".sql"
       if compgen -G "$f" > /dev/null; then
         psql "$DATABASE_URL" -f $f && success "migration-${i} done." || warn "migration-${i} failed (may already be applied)."
