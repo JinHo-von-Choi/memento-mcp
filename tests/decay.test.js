@@ -5,7 +5,7 @@
  * 작성일: 2026-03-11
  */
 
-import { updateEmaActivation, computeEmaRankBoost } from "../lib/memory/decay.js";
+import { updateEmaActivation, computeEmaRankBoost, computeDynamicHalfLife, HALF_LIFE_DAYS } from "../lib/memory/decay.js";
 
 describe("EMA activation", () => {
     it("초기 접근 시 양수 활성화 값을 반환한다", () => {
@@ -31,5 +31,26 @@ describe("EMA activation", () => {
         const boost = computeEmaRankBoost(999);
         expect(boost).toBeGreaterThanOrEqual(0);
         expect(boost).toBeLessThanOrEqual(0.3);
+    });
+});
+
+describe("computeDynamicHalfLife", () => {
+    it("ema=0이면 base half-life와 같다", () => {
+        expect(computeDynamicHalfLife("fact", 0)).toBeCloseTo(HALF_LIFE_DAYS.fact, 1);
+    });
+
+    it("ema가 높을수록 반감기가 길어진다", () => {
+        const low  = computeDynamicHalfLife("fact", 0.1);
+        const high = computeDynamicHalfLife("fact", 2.0);
+        expect(high).toBeGreaterThan(low);
+    });
+
+    it("최대 2배를 초과하지 않는다", () => {
+        expect(computeDynamicHalfLife("fact", 999)).toBeLessThanOrEqual(HALF_LIFE_DAYS.fact * 2);
+    });
+
+    it("ema=null/undefined 방어", () => {
+        expect(() => computeDynamicHalfLife("fact", null)).not.toThrow();
+        expect(computeDynamicHalfLife("fact", undefined)).toBeGreaterThan(0);
     });
 });
