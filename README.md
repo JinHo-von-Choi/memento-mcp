@@ -562,6 +562,16 @@ sessionId를 전달하면 해당 세션의 기존 파편(Redis frag:sess, Workin
 }
 ```
 
+응답에 `evaluation` 키도 포함된다. `tool_feedback`/`task_feedback`를 implicit ground truth로 사용한 IR 품질 지표다.
+
+| 필드 | 설명 |
+|------|------|
+| `rolling_precision_at_5` | 최근 100 세션의 recall Precision@5 이동 평균. `relevant=true` 비율로 근사 |
+| `sufficient_rate` | `sufficient=true` 비율 (0~1) |
+| `sample_sessions` | 평가에 사용된 세션 수 |
+| `task_success_rate` | `task_feedback.overall_success` 비율 (30일 윈도우) |
+| `task_sessions` | 평가에 사용된 task 세션 수 |
+
 ---
 
 ### memory_consolidate

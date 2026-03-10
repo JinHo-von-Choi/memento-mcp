@@ -741,6 +741,16 @@ Response includes a `searchLatencyMs` key with rolling P50/P90/P99 latencies (ms
 }
 ```
 
+Response also includes an `evaluation` key — implicit IR quality metrics derived from `tool_feedback` and `task_feedback` signals, requiring no labeled dataset:
+
+| Field | Description |
+|-------|-------------|
+| `rolling_precision_at_5` | Rolling Precision@5 over the last 100 sessions. Approximated by `relevant=true` ratio in `tool_feedback`. |
+| `sufficient_rate` | Ratio of `sufficient=true` feedback events (0–1) |
+| `sample_sessions` | Number of sessions used in the Precision@5 estimate |
+| `task_success_rate` | `task_feedback.overall_success` ratio over a 30-day window |
+| `task_sessions` | Number of task sessions used in the success rate estimate |
+
 ### 6.11 `memory_consolidate`
 
 Triggers the fifteen-stage consolidation pipeline synchronously. Returns per-stage processing counts including NLI statistics (`nliResolvedDirectly`, `nliSkippedAsNonContra`). No parameters. See §8.
