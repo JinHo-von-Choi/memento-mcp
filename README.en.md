@@ -796,6 +796,30 @@ Confirmed contradictions trigger: (1) a `contradicts` edge in `fragment_links`; 
 
 ---
 
+## Contradiction Detection Pipeline
+
+A 3-stage hybrid pipeline that suppresses O(N²) LLM comparison costs while maintaining precision.
+
+```
+On new fragment insertion
+        ↓
+pgvector cosine similarity > 0.85 candidate filter
+        ↓
+mDeBERTa NLI (in-process ONNX / external HTTP service)
+  ├── contradiction ≥ 0.8  → resolved immediately (superseded_by link + valid_to update)
+  ├── entailment   ≥ 0.6   → confirmed non-contradiction
+  └── ambiguous            → Gemini CLI escalation
+        ↓
+Preserve knowledge via temporal columns (valid_from/valid_to, superseded_by)
+```
+
+- **Cost-efficient**: 99% of candidates handled by NLI; LLM called only for numeric/domain contradictions
+- **Non-destructive**: Version control via temporal columns instead of fragment deletion
+- **Implementation**: `lib/memory/NLIClassifier.js`, `lib/memory/MemoryConsolidator.js`
+- **Env var**: `NLI_SERVICE_URL` — if unset, ONNX in-process mode is used (~280MB, downloaded on first run)
+
+---
+
 ## 9. Fault Tolerance and Degradation Behavior
 
 The system is designed to degrade gracefully rather than fail hard when external dependencies are unavailable.

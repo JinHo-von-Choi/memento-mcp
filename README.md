@@ -611,6 +611,30 @@ memory_consolidate 도구가 실행되거나 서버 내부 스케줄러(6시간 
 
 ---
 
+## 모순 탐지 파이프라인
+
+3단계 하이브리드 구조로 O(N²) LLM 비교 비용을 억제하면서 정밀도를 유지한다.
+
+```
+신규 파편 저장 시
+       ↓
+pgvector cosine similarity > 0.85 후보 필터
+       ↓
+mDeBERTa NLI (in-process ONNX / 외부 HTTP 서비스)
+  ├── contradiction ≥ 0.8  → 즉시 해결 (superseded_by 링크 + valid_to 갱신)
+  ├── entailment   ≥ 0.6   → 무관 확정 (링크 미생성)
+  └── 그 외 (모호)          → Gemini CLI 에스컬레이션
+       ↓
+시간축(valid_from/valid_to, superseded_by)으로 기존 데이터 보존
+```
+
+- **비용 효율**: 99% 후보를 NLI로 처리, LLM 호출은 수치·도메인 모순에만 발생
+- **데이터 무손실**: 파편 삭제 대신 temporal 컬럼으로 버전 관리
+- **구현 파일**: `lib/memory/NLIClassifier.js`, `lib/memory/MemoryConsolidator.js`
+- **환경변수**: `NLI_SERVICE_URL` 미설정 시 ONNX in-process 자동 사용 (~280MB, 최초 실행 시 다운로드)
+
+---
+
 ## MEMORY_CONFIG
 
 `config/memory.js`에 정의된 설정 파일. 랭킹 가중치와 stale 임계값을 서버 코드 수정 없이 조정할 수 있다.
