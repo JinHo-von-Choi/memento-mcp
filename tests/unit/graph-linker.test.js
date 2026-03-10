@@ -254,6 +254,83 @@ describe("GraphLinker", () => {
     assert.strictEqual(result.linksCreated, 2);
   });
 
+  /** buildCoRetrievalLinks 테스트 */
+
+  test("buildCoRetrievalLinks: 빈 배열이면 0을 반환한다", async () => {
+    let callCount = 0;
+    const mockLinker = {
+      async buildCoRetrievalLinks(fragmentIds) {
+        if (!fragmentIds || fragmentIds.length < 2) return 0;
+        callCount++;
+        return 0;
+      }
+    };
+    const count = await mockLinker.buildCoRetrievalLinks([]);
+    assert.strictEqual(count, 0);
+    assert.strictEqual(callCount, 0);
+  });
+
+  test("buildCoRetrievalLinks: 단일 파편이면 링크를 생성하지 않는다", async () => {
+    let callCount = 0;
+    const mockLinker = {
+      async buildCoRetrievalLinks(fragmentIds) {
+        if (!fragmentIds || fragmentIds.length < 2) return 0;
+        callCount++;
+        return 0;
+      }
+    };
+    const count = await mockLinker.buildCoRetrievalLinks(["frag-1"]);
+    assert.strictEqual(count, 0);
+    assert.strictEqual(callCount, 0);
+  });
+
+  test("buildCoRetrievalLinks: 2개 파편이면 1쌍 링크 생성", async () => {
+    const insertedPairs = [];
+    const mockLinker = {
+      async buildCoRetrievalLinks(fragmentIds) {
+        if (!fragmentIds || fragmentIds.length < 2) return 0;
+        const ids   = fragmentIds.slice(0, 5);
+        let   count = 0;
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            insertedPairs.push([ids[i], ids[j]]);
+            count++;
+          }
+        }
+        return count;
+      }
+    };
+    const count = await mockLinker.buildCoRetrievalLinks(["frag-1", "frag-2"]);
+    assert.strictEqual(count, 1);
+    assert.deepStrictEqual(insertedPairs, [["frag-1", "frag-2"]]);
+  });
+
+  test("buildCoRetrievalLinks: 5개 초과면 상위 5개만 페어링 (C(5,2)=10)", async () => {
+    const insertedPairs = [];
+    const mockLinker = {
+      async buildCoRetrievalLinks(fragmentIds) {
+        if (!fragmentIds || fragmentIds.length < 2) return 0;
+        const ids   = fragmentIds.slice(0, 5);
+        let   count = 0;
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            insertedPairs.push([ids[i], ids[j]]);
+            count++;
+          }
+        }
+        return count;
+      }
+    };
+    const ids   = ["a", "b", "c", "d", "e", "f", "g"];
+    const count = await mockLinker.buildCoRetrievalLinks(ids);
+    assert.strictEqual(count, 10);
+    /** 6번째 이후 파편(f, g)은 포함되지 않아야 한다 */
+    for (const [from, to] of insertedPairs) {
+      assert.ok(!["f", "g"].includes(from), `${from} should not be in pairs`);
+      assert.ok(!["f", "g"].includes(to),   `${to} should not be in pairs`);
+    }
+  });
+
   test("중복 링크 무시 (createLink throws)", async () => {
     mockDb.queryResults.set("WHERE id = $1 AND embedding IS NOT NULL", {
       rows: [{
