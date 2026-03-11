@@ -148,6 +148,8 @@ lib/tools/
 ├── db-tools.js  MCP DB 도구 핸들러 (db.js에서 분리된 도구별 로직)
 ├── embedding.js OpenAI 텍스트 임베딩 생성
 ├── stats.js     접근 통계 수집 및 저장
+├── prompts.js   MCP Prompts 정의 (analyze-session, retrieve-relevant-memory 등)
+├── resources.js MCP Resources 정의 (memory://stats, memory://topics 등)
 └── index.js     도구 핸들러 export
 ```
 
