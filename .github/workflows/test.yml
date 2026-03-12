@@ -1,0 +1,64 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  unit:
+    name: Unit Tests (no DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Jest tests
+        run: npm test
+      - name: node:test unit tests
+        run: npm run test:unit
+
+  e2e:
+    name: E2E Tests (with DB)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_DB:       memento_test
+          POSTGRES_USER:     memento
+          POSTGRES_PASSWORD: memento_test
+        ports:
+          - 35433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      POSTGRES_HOST:      localhost
+      POSTGRES_PORT:      35433
+      POSTGRES_DB:        memento_test
+      POSTGRES_USER:      memento
+      POSTGRES_PASSWORD:  memento_test
+      REDIS_ENABLED:      "false"
+      EMBEDDING_ENABLED:  "false"
+      MEMENTO_ACCESS_KEY: ci-test-key
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - name: Run migrations
+        run: |
+          for f in lib/memory/migration-*.sql; do
+            psql postgresql://memento:memento_test@localhost:35433/memento_test -f "$f"
+          done
+      - name: E2E tests
+        run: npm run test:e2e
