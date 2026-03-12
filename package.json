@@ -11,6 +11,7 @@
     "test:unit": "node --test tests/unit/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "test:e2e":         "node --test tests/e2e/*.test.js",
+    "test:e2e:local":   "bash scripts/run-e2e-tests.sh",
     "lint": "eslint .",
     "backfill:embeddings": "node lib/memory/backfill-embeddings.js"
   },
