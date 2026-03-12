@@ -1149,6 +1149,29 @@ PostgreSQL만 있으면 핵심 기능이 동작한다. Redis를 추가하면 L1 
 
 ---
 
+## 테스트
+
+### 단위 테스트 (DB 불필요)
+
+```bash
+npm test          # Jest — tests/*.test.js
+npm run test:unit # node:test — tests/unit/*.test.js
+```
+
+### E2E 테스트 (PostgreSQL 필요)
+
+로컬 Docker 환경:
+```bash
+npm run test:e2e:local
+```
+
+기존 DB 연결 사용:
+```bash
+npm run test:e2e   # .env 또는 환경변수에 POSTGRES_* 설정 필요
+```
+
+---
+
 ## 설치
 
 설치, 마이그레이션, Claude Code 연결, 훅 설정은 **[INSTALL.md](INSTALL.md)**를 참조한다.
