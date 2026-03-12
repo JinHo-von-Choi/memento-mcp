@@ -25,22 +25,19 @@ import { validateOrigin } from "./lib/utils.js";
 import {
   closeStreamableSession,
   closeLegacySseSession,
-  cleanupExpiredSessions,
-  getSessionCounts,
   getAllSessionIds
 } from "./lib/sessions.js";
-
-/** OAuth */
-import { cleanupExpiredOAuthData } from "./lib/oauth.js";
 
 /** 도구 (통계 저장용) */
 import { saveAccessStats } from "./lib/tools/index.js";
 import { shutdownPool } from "./lib/tools/db.js";
 import { getMemoryEvaluator } from "./lib/memory/MemoryEvaluator.js";
-import { MemoryManager }     from "./lib/memory/MemoryManager.js";
 
 /** 메트릭 */
-import { recordHttpRequest, updateSessionCounts } from "./lib/metrics.js";
+import { recordHttpRequest } from "./lib/metrics.js";
+
+/** 스케줄러 */
+import { startSchedulers } from "./lib/scheduler.js";
 
 /** HTTP 핸들러 */
 import {
@@ -196,73 +193,9 @@ server.listen(PORT, () => {
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);
 
-  setInterval(cleanupExpiredSessions, 5 * 60 * 1000);
-  setInterval(cleanupExpiredOAuthData, 5 * 60 * 1000);
-  console.log("Session cleanup: Running every 5 minutes");
-
-  setInterval(() => {
-    const { streamable: _ss, legacy: _ls } = getSessionCounts();
-    updateSessionCounts(_ss, _ls);
-  }, 60 * 1000);
-  console.log("Metrics: Session counts updated every minute");
-
-  setInterval(() => saveAccessStats(LOG_DIR), 10 * 60 * 1000);
-  console.log("Access stats: Saving every 10 minutes");
-
-  const CONSOLIDATE_MS = parseInt(process.env.CONSOLIDATE_INTERVAL_MS || "21600000", 10);
-  setInterval(async () => {
-    try {
-      const mm     = MemoryManager.getInstance();
-      const result = await mm.consolidate();
-      console.log(`[Consolidate] done: expired=${result.expiredDeleted}, decay=${result.importanceDecay}, merged=${result.duplicatesMerged}`);
-    } catch (err) {
-      console.error(`[Consolidate] failed: ${err.message}`);
-    }
-  }, CONSOLIDATE_MS).unref();
-  console.log(`Consolidate: Running every ${CONSOLIDATE_MS / 3600000}h`);
-
-  setInterval(async () => {
-    try {
-      const mm    = MemoryManager.getInstance();
-      const count = await mm.store.generateMissingEmbeddings(20);
-      if (count > 0) console.log(`[EmbeddingBackfill] Generated ${count} embeddings`);
-    } catch (err) {
-      console.error(`[EmbeddingBackfill] failed: ${err.message}`);
-    }
-  }, 30 * 60_000).unref();
-  console.log("EmbeddingBackfill: Running every 30min (batch 20)");
-
-  getMemoryEvaluator().start().catch(err => {
-    console.error("[Startup] Failed to start MemoryEvaluator:", err.message);
-  });
-
-  import("./lib/memory/EmbeddingWorker.js")
-    .then(({ EmbeddingWorker }) => {
-      globalEmbeddingWorker = new EmbeddingWorker();
-      return globalEmbeddingWorker.start();
-    })
-    .then(async () => {
-      const { GraphLinker } = await import("./lib/memory/GraphLinker.js");
-      const graphLinker     = new GraphLinker();
-
-      globalEmbeddingWorker.on("embedding_ready", async ({ fragmentId }) => {
-        try {
-          const count = await graphLinker.linkFragment(fragmentId, "system");
-          if (count > 0) console.debug(`[GraphLinker] Linked ${count} for ${fragmentId}`);
-        } catch (err) {
-          console.warn(`[GraphLinker] Error: ${err.message}`);
-        }
-      });
-    })
-    .catch(err => {
-      console.error("[Startup] Failed to start EmbeddingWorker:", err.message);
-    });
-
-  import("./lib/memory/NLIClassifier.js")
-    .then(m => m.preloadNLI())
-    .catch(err => {
-      console.warn("[Startup] NLI preload skipped:", err.message);
-    });
+  const embeddingWorkerRef = { current: null };
+  startSchedulers({ globalEmbeddingWorkerRef: embeddingWorkerRef });
+  globalEmbeddingWorker = embeddingWorkerRef.current;
 });
 
 /**
