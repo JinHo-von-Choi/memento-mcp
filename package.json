@@ -7,6 +7,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test:unit": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js",
+    "test:e2e":         "node --test tests/e2e/*.test.js",
     "lint": "eslint .",
     "backfill:embeddings": "node lib/memory/backfill-embeddings.js"
   },
