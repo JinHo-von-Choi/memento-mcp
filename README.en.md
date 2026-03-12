@@ -94,7 +94,7 @@ The system decomposes into three structural layers: the HTTP transport layer, th
                                 │ JSON-RPC 2.0 dispatch
 ┌───────────────────────────────▼────────────────────────────────────┐
 │         Protocol & Tool Dispatch  (jsonrpc.js + tool-registry.js)  │
-│                       11 MCP Memory Tools                          │
+│                       12 MCP Memory Tools                          │
 └──────────────┬────────────────────────────────────────────────────┘
                │
 ┌──────────────▼───────────────────────────────────────────────────┐
@@ -116,7 +116,7 @@ The system decomposes into three structural layers: the HTTP transport layer, th
                │  Working Memory    │   │   5s polling queue     │  │
                │  Evaluation queue  │   ├────────────────────────┤  │
                │  Session Activity  │   │   MemoryConsolidator   ├──┘
-               └────────────────────┘   │   11-stage pipeline    │
+               └────────────────────┘   │   18-step pipeline     │
                                         │   NLI + Gemini hybrid  │
                ┌────────────────────┐   ├────────────────────────┤
                │   NLI Classifier   │   │   AutoReflect          │
@@ -136,7 +136,7 @@ The system decomposes into three structural layers: the HTTP transport layer, th
 
 ### 2.2 HTTP Transport Layer
 
-`server.js` implements a Node.js HTTP server handling eleven distinct endpoint routes. Two MCP transports are supported concurrently:
+`server.js` implements a Node.js HTTP server handling twelve distinct endpoint routes. Two MCP transports are supported concurrently:
 
 - **Streamable HTTP** (MCP specification §2025-03-26 and later): `POST /mcp` receives JSON-RPC 2.0 request bodies; `GET /mcp` establishes a server-sent event stream for server-initiated pushes; `DELETE /mcp` terminates sessions explicitly.
 - **Legacy SSE** (MCP specification §2024-11-05): `GET /sse` creates a session and opens the SSE stream; `POST /message?sessionId=<id>` receives JSON-RPC requests whose responses are delivered over the SSE channel.
@@ -147,7 +147,7 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 
 ### 2.2 Protocol and Dispatch Layer
 
-`lib/jsonrpc.js` parses incoming JSON-RPC 2.0 envelopes and dispatches to registered method handlers. `lib/tool-registry.js` registers the eleven memory tools exported from `lib/tools/memory.js`. Database access utilities (`lib/tools/db.js`), embedding generation (`lib/tools/embedding.js`), and access statistics (`lib/tools/stats.js`) are internal dependencies not exposed through the MCP tool interface.
+`lib/jsonrpc.js` parses incoming JSON-RPC 2.0 envelopes and dispatches to registered method handlers. `lib/tool-registry.js` registers the twelve memory tools exported from `lib/tools/memory.js`. Database access utilities (`lib/tools/db.js`), embedding generation (`lib/tools/embedding.js`), and access statistics (`lib/tools/stats.js`) are internal dependencies not exposed through the MCP tool interface.
 
 ### 2.3 Memory Subsystem
 
@@ -163,7 +163,13 @@ OAuth 2.0 endpoints: `GET /.well-known/oauth-authorization-server`, `GET /.well-
 | `EmbeddingWorker.js` | Redis queue-based async embedding generation worker (EventEmitter). Emits `embedding_ready` on completion. |
 | `GraphLinker.js` | Subscribes to `embedding_ready`; generates typed edges for newly embedded fragments. Retroactive linking during consolidation. Hebbian co-retrieval linking (`buildCoRetrievalLinks`). |
 | `MorphemeIndex.js` | Morpheme-level embedding lookup via `morpheme_dict` table. L3 fallback when semantic results are sparse. |
-| `MemoryConsolidator.js` | Fifteen-stage lifecycle maintenance pipeline (NLI + Gemini CLI hybrid contradiction detection, feedback-adaptive importance calibration). |
+| `MemoryConsolidator.js` | Eighteen-step lifecycle maintenance pipeline (NLI + Gemini CLI hybrid contradiction detection, feedback-adaptive importance calibration). |
+| `ConflictResolver.js` | Conflict detection at `remember` time; auto-linking and supersede processing. |
+| `SessionLinker.js` | Session fragment integration, automatic linking, cycle detection. |
+| `LinkStore.js` | Fragment link management (`fragment_links` CRUD + RCA chain traversal). |
+| `FragmentGC.js` | Fragment expiration deletion, exponential decay, TTL tier transitions. |
+| `ConsolidatorGC.js` | Feedback reports, stale fragment collection/cleanup, long fragment splitting, feedback-based calibration. |
+| `ContradictionDetector.js` | Contradiction detection, supersession detection, pending queue processing. |
 | `MemoryEvaluator.js` | Asynchronous Gemini CLI quality assessment worker. Singleton. |
 | `NLIClassifier.js` | Natural Language Inference classifier (mDeBERTa ONNX, CPU-only). Entailment/contradiction/neutral labeling for contradiction detection Stage 2. |
 | `SessionActivityTracker.js` | Per-session tool call and fragment activity tracking (Redis Hash). TTL 24h. |
@@ -206,6 +212,9 @@ Supporting infrastructure modules:
 | `lib/logger.js` | Winston structured logger with daily log rotation |
 | `lib/rate-limiter.js` | IP-based sliding window rate limiter |
 | `lib/utils.js` | Origin validation, JSON body parsing (2MB limit), SSE framing |
+| `lib/http-handlers.js` | HTTP request handlers (per-endpoint processing logic) |
+| `lib/scheduler.js` | Periodic task scheduler (manages all setInterval jobs after server start) |
+| `lib/tools/memory-schemas.js` | Tool schema definitions (`inputSchema` for all 12 memory tools) |
 | `lib/tools/db-tools.js` | MCP DB tool handlers (separated from `lib/tools/db.js`) |
 | `lib/http/helpers.js` | HTTP SSE/request helpers |
 | `lib/logging/audit.js` | Audit and access logging |
@@ -564,17 +573,17 @@ Stale detection thresholds (days without access before cold-tier expiration): `p
 
 ## 6. MCP Tool Interface
 
-Eleven tools are registered. All are defined in `lib/tools/memory.js` and registered via `lib/tool-registry.js`. No database-layer tools are exposed through the MCP interface.
+Twelve tools are registered. All are defined in `lib/tools/memory.js` and registered via `lib/tool-registry.js`. No database-layer tools are exposed through the MCP interface.
 
 ### 6.1 Tool Interaction Patterns
 
-The eleven tools form three functional clusters:
+The twelve tools form three functional clusters:
 
 **Storage cluster:** `remember` persists new knowledge; `amend` modifies existing fragments in place with version archival; `link` establishes typed edges between fragments; `forget` removes fragments.
 
 **Retrieval cluster:** `recall` executes the three-tier cascade; `context` loads session-initialization memory; `graph_explore` traverses causal chains from an error fragment.
 
-**Maintenance and telemetry cluster:** `reflect` converts a session summary to a fragment set at session close (also triggered automatically on session termination via `AutoReflect`); `tool_feedback` records instrument-level utility assessments; `memory_stats` returns aggregate store statistics; `memory_consolidate` triggers the eleven-stage maintenance pipeline.
+**Maintenance and telemetry cluster:** `reflect` converts a session summary to a fragment set at session close (also triggered automatically on session termination via `AutoReflect`); `tool_feedback` records instrument-level utility assessments; `memory_stats` returns aggregate store statistics; `memory_consolidate` triggers the eighteen-step maintenance pipeline.
 
 A canonical session workflow:
 
@@ -753,7 +762,7 @@ Response also includes an `evaluation` key — implicit IR quality metrics deriv
 
 ### 6.11 `memory_consolidate`
 
-Triggers the fifteen-stage consolidation pipeline synchronously. Returns per-stage processing counts including NLI statistics (`nliResolvedDirectly`, `nliSkippedAsNonContra`). No parameters. See §8.
+Triggers the eighteen-step consolidation pipeline synchronously. Returns per-stage processing counts including NLI statistics (`nliResolvedDirectly`, `nliSkippedAsNonContra`). No parameters. See §8.
 
 ### 6.12 `graph_explore`
 
@@ -763,6 +772,14 @@ Performs a one-hop traversal of the causal relation subgraph from a specified or
 |-----------|------|:--------:|-------------|
 | `startId` | string | Y | Origin fragment ID. `error`-typed fragments are the canonical input. |
 | `agentId` | string | | Agent identifier |
+
+### 6.13 `fragment_history`
+
+Returns the full change history for a fragment: all prior versions created by `amend` and the `superseded_by` chain.
+
+| Parameter | Type | Required | Description |
+|-----------|------|:--------:|-------------|
+| `id` | string | Y | Fragment ID to query history for |
 
 ---
 
@@ -794,7 +811,7 @@ The evaluator uses the Gemini CLI (`geminiCLIJson`) rather than the Gemini REST 
 
 ## 8. Consolidation Pipeline: MemoryConsolidator
 
-The consolidation pipeline is an eleven-stage sequential maintenance procedure.
+The consolidation pipeline is an eighteen-step sequential maintenance procedure (11 main stages + 7 sub-steps).
 
 ```
 memory_consolidate

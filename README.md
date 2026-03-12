@@ -90,10 +90,16 @@ server.js  (HTTP 서버)
             ├── FragmentIndex.js          Redis L1 인덱스 관리
             ├── EmbeddingWorker.js        Redis 큐 기반 비동기 임베딩 생성 워커 (EventEmitter)
             ├── GraphLinker.js            임베딩 완료 이벤트 구독 자동 관계 생성 + 소급 링킹 + Hebbian co-retrieval 링킹
-            ├── MemoryConsolidator.js     12단계 유지보수 파이프라인 (NLI + Gemini 하이브리드)
+            ├── MemoryConsolidator.js     18단계 유지보수 파이프라인 (NLI + Gemini 하이브리드)
             ├── MemoryEvaluator.js        비동기 Gemini CLI 품질 평가 워커 (싱글턴)
             ├── NLIClassifier.js          NLI 기반 모순 분류기 (mDeBERTa ONNX, CPU)
             ├── SessionActivityTracker.js 세션별 도구 호출/파편 활동 추적 (Redis)
+            ├── ConflictResolver.js       remember 시점 충돌 감지, 자동 링크, supersede 처리
+            ├── SessionLinker.js         세션 파편 통합, 자동 링크, 사이클 감지
+            ├── LinkStore.js             파편 링크 관리 (fragment_links CRUD + RCA 체인)
+            ├── FragmentGC.js            파편 만료 삭제, 지수 감쇠, TTL 계층 전환
+            ├── ConsolidatorGC.js        피드백 리포트, stale 파편 수집/정리, 긴 파편 분할, 피드백 기반 보정
+            ├── ContradictionDetector.js 모순 감지, 대체 관계 감지, 보류 큐 처리
             ├── AutoReflect.js            세션 종료 시 자동 reflect 오케스트레이터
             ├── decay.js                  지수 감쇠 반감기 상수, 순수 계산 함수, ACT-R EMA 활성화 근사 (`updateEmaActivation`, `computeEmaRankBoost`), EMA 기반 동적 반감기 (`computeDynamicHalfLife`)
             ├── SearchMetrics.js          L1/L2/L3/total 레이어별 지연 시간 수집 (Redis 원형 버퍼, P50/P90/P99)
@@ -127,6 +133,8 @@ lib/
 ├── metrics.js         Prometheus 메트릭 수집 (prom-client)
 ├── logger.js          Winston 로거 (daily rotate)
 ├── rate-limiter.js    IP 기반 sliding window rate limiter
+├── http-handlers.js   HTTP 요청 핸들러 (엔드포인트별 처리 로직)
+├── scheduler.js       주기 작업 스케줄러 (setInterval 작업 관리)
 └── utils.js           Origin 검증, JSON 바디 파싱(2MB 상한), SSE 출력
 
 lib/admin/
@@ -143,7 +151,8 @@ lib/logging/
 
 ```
 lib/tools/
-├── memory.js    12개 MCP 도구 정의(스키마) 및 핸들러
+├── memory.js    12개 MCP 도구 핸들러
+├── memory-schemas.js  도구 스키마 정의 (inputSchema)
 ├── db.js        PostgreSQL 연결 풀, RLS 적용 쿼리 헬퍼 (MCP 미노출)
 ├── db-tools.js  MCP DB 도구 핸들러 (db.js에서 분리된 도구별 로직)
 ├── embedding.js OpenAI 텍스트 임베딩 생성
@@ -1151,23 +1160,33 @@ PostgreSQL만 있으면 핵심 기능이 동작한다. Redis를 추가하면 L1 
 
 ## 테스트
 
-### 단위 테스트 (DB 불필요)
-
+### 전체 테스트 (DB 불필요)
 ```bash
-npm test          # Jest — tests/*.test.js
-npm run test:unit # node:test — tests/unit/*.test.js
+npm test          # Jest + unit + integration 순차 실행
+```
+
+개별 실행:
+```bash
+npm run test:jest        # Jest — tests/*.test.js
+npm run test:unit        # node:test — tests/unit/*.test.js
+npm run test:integration # node:test — tests/integration/*.test.js
 ```
 
 ### E2E 테스트 (PostgreSQL 필요)
 
-로컬 Docker 환경:
+로컬 Docker 환경 (권장):
 ```bash
-npm run test:e2e:local
+npm run test:e2e:local   # docker-compose로 테스트 DB 기동 후 실행
 ```
 
 기존 DB 연결 사용:
 ```bash
-npm run test:e2e   # .env 또는 환경변수에 POSTGRES_* 설정 필요
+DATABASE_URL=postgresql://user:pass@host:port/db npm run test:e2e
+```
+
+### CI 전체 (DB 필요)
+```bash
+npm run test:ci          # npm test + test:e2e
 ```
 
 ---

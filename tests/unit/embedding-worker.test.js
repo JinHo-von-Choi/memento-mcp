@@ -7,7 +7,7 @@
  * DB/Redis/API 의존성은 mock 처리.
  */
 
-import { test, describe, beforeEach, afterEach, mock } from "node:test";
+import { test, describe, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 

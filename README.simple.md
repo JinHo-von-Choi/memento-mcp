@@ -180,7 +180,7 @@ hot (자주 참조됨) → warm (한동안 침묵) → cold (오래 잠듦) → 
 
 ---
 
-## 6. MCP 도구 11개
+## 6. MCP 도구 12개
 
 | 도구 | 설명 |
 |------|------|
@@ -194,6 +194,7 @@ hot (자주 참조됨) → warm (한동안 침묵) → cold (오래 잠듦) → 
 | `graph_explore` | 인과 체인 탐색 (장애 근본 원인 추적) |
 | `memory_stats` | 저장소 통계 |
 | `memory_consolidate` | 주기적 유지보수 (감쇠, 병합, NLI+Gemini 하이브리드 모순 탐지). 감쇠는 POWER() 배치 SQL로 처리, 유형별 반감기 적용, last_decay_at 기준 멱등성 보장 |
+| `fragment_history` | 파편의 전체 변경 이력 조회 (amend 이전 버전 + superseded_by 체인) |
 | `tool_feedback` | 검색 품질 피드백 |
 
 ---
