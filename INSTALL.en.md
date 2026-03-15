@@ -77,6 +77,21 @@ psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
 
 # fragment_links constraint: adds superseded_by to relation_type CHECK
 psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
+
+# Link weight column for Hebbian co-retrieval strength
+psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql
+
+# Morpheme dictionary table for Korean tokenization
+psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql
+
+# fragment_links CHECK: adds co_retrieved relation type
+psql $DATABASE_URL -f lib/memory/migration-009-co-retrieved.sql
+
+# EMA activation columns for dynamic decay half-life
+psql $DATABASE_URL -f lib/memory/migration-010-ema-activation.sql
+
+# API key groups (N:M mapping for cross-agent memory sharing)
+psql $DATABASE_URL -f lib/memory/migration-011-key-groups.sql
 ```
 
 > **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
