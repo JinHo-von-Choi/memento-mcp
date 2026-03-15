@@ -20,7 +20,7 @@ jobs:
       - name: Jest tests
         run: npm test
       - name: node:test unit tests
-        run: npm run test:unit
+        run: npm run test:unit:node
 
   e2e:
     name: E2E Tests (with DB)
