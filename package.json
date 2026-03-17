@@ -16,7 +16,7 @@
     "test:e2e:local":   "bash scripts/run-e2e-tests.sh",
     "test:ci": "npm run test:all && npm run test:e2e",
     "lint": "eslint . --max-warnings 0",
-    "backfill:embeddings": "node lib/memory/backfill-embeddings.js"
+    "backfill:embeddings": "node scripts/backfill-embeddings.js"
   },
   "dependencies": {
     "@huggingface/transformers": "^3.8.1",

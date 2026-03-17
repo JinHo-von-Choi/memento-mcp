@@ -5,17 +5,17 @@
  * 작성자: 최진호
  * 작성일: 2026-03-07
  *
- * 실행: DATABASE_URL=$DATABASE_URL node lib/memory/backfill-embeddings.js
+ * 실행: DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
  *
  * importance 무관하게 embedding IS NULL인 모든 파편을 대상으로 한다.
  * 배치 크기 10, API rate limit 고려 500ms 간격.
  */
 
-import { getPrimaryPool, queryWithAgentVector } from "../tools/db.js";
+import { getPrimaryPool, queryWithAgentVector } from "../lib/tools/db.js";
 import {
   generateEmbedding, prepareTextForEmbedding,
   vectorToSql, EMBEDDING_ENABLED
-} from "../tools/embedding.js";
+} from "../lib/tools/embedding.js";
 
 const SCHEMA    = "agent_memory";
 const BATCH     = 10;

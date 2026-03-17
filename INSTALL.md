@@ -76,9 +76,9 @@ psql $DATABASE_URL -f lib/memory/migration-012-quality-verified.sql # quality_ve
 ```bash
 # 기본 임베딩(1536차원) 사용 시: migration-007 불필요
 # 2000차원 초과 모델(Gemini gemini-embedding-001 등) 사용 시:
-# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js
+# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node scripts/migration-007-flexible-embedding-dims.js
 
-DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js  # 임베딩 L2 정규화 (1회)
+DATABASE_URL=$DATABASE_URL node scripts/normalize-vectors.js  # 임베딩 L2 정규화 (1회)
 
 # 기존 파편 임베딩 백필 (임베딩 API 키 필요, 1회성)
 npm run backfill:embeddings

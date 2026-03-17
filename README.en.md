@@ -1152,8 +1152,8 @@ First-time switch to 3072 dims requires `migration-007` to convert the `embeddin
 
 ```bash
 EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL \
-  node lib/memory/migration-007-flexible-embedding-dims.js
-DATABASE_URL=$DATABASE_URL node lib/memory/backfill-embeddings.js
+  node scripts/migration-007-flexible-embedding-dims.js
+DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
 ```
 
 | Model | Dimensions | Notes |

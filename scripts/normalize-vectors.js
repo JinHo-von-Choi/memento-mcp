@@ -1,12 +1,12 @@
 /**
  * 기존 임베딩 벡터 일괄 L2 정규화 마이그레이션
- * 일회성 실행 스크립트: node lib/memory/normalize-vectors.js
+ * 일회성 실행 스크립트: node scripts/normalize-vectors.js
  *
  * 작성자: 최진호 / 2026-03-03
  */
 
 import pg from "pg";
-import { normalizeL2 } from "../tools/embedding.js";
+import { normalizeL2 } from "../lib/tools/embedding.js";
 
 const pool   = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const SCHEMA = "agent_memory";

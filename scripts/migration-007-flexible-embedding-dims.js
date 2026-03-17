@@ -9,14 +9,14 @@
  * - ≤2000차원: vector(N)  + HNSW 인덱스
  * - >2000차원: halfvec(N) + HNSW 인덱스 (pgvector ≥0.7.0 필요)
  *
- * 실행: EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js
+ * 실행: EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node scripts/migration-007-flexible-embedding-dims.js
  *
  * 주의: 컬럼 타입 변경 시 기존 임베딩 데이터가 NULL로 초기화된다.
  *       실행 후 backfill-embeddings.js로 재임베딩이 필요하다.
  */
 
-import { getPrimaryPool } from "../tools/db.js";
-import { EMBEDDING_DIMENSIONS } from "../config.js";
+import { getPrimaryPool } from "../lib/tools/db.js";
+import { EMBEDDING_DIMENSIONS } from "../lib/config.js";
 
 const SCHEMA     = "agent_memory";
 const TABLE      = "fragments";
