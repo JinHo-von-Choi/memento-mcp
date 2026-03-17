@@ -15,13 +15,15 @@ describe("remember supersedes parameter", () => {
     assert.strictEqual(typeof mm._supersede, "function", "_supersede 메서드 필수");
   });
 
-  test("_supersede가 superseded_by 링크와 valid_to 갱신을 수행한다", async () => {
+  test("_supersede가 ConflictResolver.supersede로 위임한다", async () => {
     const { MemoryManager } = await import("../../lib/memory/MemoryManager.js");
     const mm = new MemoryManager();
+    /** _supersede는 ConflictResolver.supersede 위임 래퍼 — 소스에 위임 호출이 있어야 한다 */
     const src = mm._supersede.toString();
-    assert.ok(src.includes("superseded_by"), "superseded_by 링크 생성 필수");
-    assert.ok(src.includes("valid_to"), "valid_to 갱신 필수");
-    assert.ok(src.includes("GREATEST(0.05"), "importance 하한 0.05 필수");
+    assert.ok(
+      src.includes("conflictResolver") && src.includes("supersede"),
+      "_supersede는 conflictResolver.supersede 위임 필수"
+    );
   });
 
   test("rememberDefinition inputSchema에 supersedes가 정의되어 있다", async () => {
