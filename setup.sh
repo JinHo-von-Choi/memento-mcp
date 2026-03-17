@@ -287,7 +287,7 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
     success "Schema applied."
   else
     info "Running migrations..."
-    for i in 001 002 003 004 005 006 007 008 009 010; do
+    for i in 001 002 003 004 005 006 007 008 009 010 011 012; do
       f="lib/memory/migration-${i}-"*".sql"
       if compgen -G "$f" > /dev/null; then
         psql "$DATABASE_URL" -f $f && success "migration-${i} done." || warn "migration-${i} failed (may already be applied)."
@@ -299,14 +299,14 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
     warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000 -- migration-007 required."
     if ask_yn "Run migration-007?" "y"; then
       EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" DATABASE_URL="$DATABASE_URL" \
-        node lib/memory/migration-007-flexible-embedding-dims.js
+        node scripts/migration-007-flexible-embedding-dims.js
       success "migration-007 done."
     fi
   fi
 
   if [[ -n "$EMBEDDING_PROVIDER" ]]; then
     if ask_yn "Run L2 normalization on existing vectors? (one-time)" "y"; then
-      node lib/memory/normalize-vectors.js
+      node scripts/normalize-vectors.js
       success "L2 normalization done."
     fi
   fi
