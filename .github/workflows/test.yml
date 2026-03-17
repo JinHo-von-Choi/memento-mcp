@@ -17,6 +17,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Lint
+        run: npm run lint
       - name: Jest tests
         run: npm test
       - name: node:test unit tests

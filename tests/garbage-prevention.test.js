@@ -7,13 +7,13 @@
  * 수정일: 2026-03-17 (Task 1, 8, 9 추가)
  */
 
-import { FragmentGC }               from "../../lib/memory/FragmentGC.js";
-import { FragmentSearch }            from "../../lib/memory/FragmentSearch.js";
+import { FragmentGC }               from "../lib/memory/FragmentGC.js";
+import { FragmentSearch }            from "../lib/memory/FragmentSearch.js";
 import { sanitizeInsertImportance,
-         FragmentWriter }            from "../../lib/memory/FragmentWriter.js";
-import { FragmentStore }             from "../../lib/memory/FragmentStore.js";
+         FragmentWriter }            from "../lib/memory/FragmentWriter.js";
+import { FragmentStore }             from "../lib/memory/FragmentStore.js";
 import { computeEmaRankBoost,
-         computeUtilityScore }       from "../../lib/memory/decay.js";
+         computeUtilityScore }       from "../lib/memory/decay.js";
 
 // ── Task 1: fallback EMA 차단 ──────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ describe("quality_verified permanent 장벽", () => {
   });
 
   it("MemoryEvaluator.evaluate가 keep 판정 시 quality_verified=true를 업데이트한다", async () => {
-    const { MemoryEvaluator } = await import("../../lib/memory/MemoryEvaluator.js");
+    const { MemoryEvaluator } = await import("../lib/memory/MemoryEvaluator.js");
     const src = MemoryEvaluator.toString();
     expect(src).toContain("quality_verified");
     expect(src).toContain("true");
@@ -141,7 +141,7 @@ describe("utility_score 나이 가중치", () => {
 
 describe("고-EMA 저-importance 재평가", () => {
   it("_requeueHighEmaLowQuality가 MemoryConsolidator에 존재한다", async () => {
-    const { MemoryConsolidator } = await import("../../lib/memory/MemoryConsolidator.js");
+    const { MemoryConsolidator } = await import("../lib/memory/MemoryConsolidator.js");
     const c = new MemoryConsolidator();
     expect(typeof c._requeueHighEmaLowQuality).toBe("function");
   });
