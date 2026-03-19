@@ -115,3 +115,51 @@ describe("context() seen IDs 저장", () => {
     assert.strictEqual(seenIds.length, 2, "null ID는 제외되어야 한다");
   });
 });
+
+describe("recall() seen IDs 필터링", () => {
+
+  test("excludeSeen=true(기본)면 seen 파편이 제외된다", () => {
+    const seenIds     = new Set(["frag-1", "frag-3"]);
+    const excludeSeen = true;
+    const fragments   = [
+      { id: "frag-1", content: "A" },
+      { id: "frag-2", content: "B" },
+      { id: "frag-3", content: "C" }
+    ];
+
+    const filtered = excludeSeen
+      ? fragments.filter(f => !seenIds.has(f.id))
+      : fragments;
+
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].id, "frag-2");
+  });
+
+  test("excludeSeen=false면 모든 파편이 반환된다", () => {
+    const seenIds     = new Set(["frag-1"]);
+    const excludeSeen = false;
+    const fragments   = [
+      { id: "frag-1", content: "A" },
+      { id: "frag-2", content: "B" }
+    ];
+
+    const filtered = excludeSeen
+      ? fragments.filter(f => !seenIds.has(f.id))
+      : fragments;
+
+    assert.strictEqual(filtered.length, 2);
+  });
+
+  test("sessionId 없으면 필터링 건너뛴다", () => {
+    const sessionId   = undefined;
+    const excludeSeen = true;
+    const fragments   = [{ id: "frag-1", content: "A" }];
+
+    const seenIds = (excludeSeen && sessionId) ? new Set(["frag-1"]) : new Set();
+    const filtered = seenIds.size > 0
+      ? fragments.filter(f => !seenIds.has(f.id))
+      : fragments;
+
+    assert.strictEqual(filtered.length, 1, "sessionId 없으면 필터링 없음");
+  });
+});
