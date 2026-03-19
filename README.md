@@ -1247,6 +1247,16 @@ EMBEDDING_DIMENSIONS=768
 | PUT | /v1/internal/model/nothing/keys/:id | API 키 상태 변경 (active ↔ inactive) |
 | DELETE | /v1/internal/model/nothing/keys/:id | API 키 삭제 |
 
+### /health 엔드포인트 정책
+
+| 의존성 | 분류 | down 시 응답 |
+|--------|------|-------------|
+| PostgreSQL | 필수 | 503 (degraded) |
+| Redis | 선택 | 200 (healthy, warnings 포함) |
+
+Redis가 비활성화(`REDIS_ENABLED=false`)되거나 연결 실패해도 서버는 healthy(200)를 반환합니다.
+L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색은 PostgreSQL만으로 동작합니다.
+
 인증 방식은 두 가지다. Streamable HTTP는 `initialize` 요청 시 `Authorization: Bearer <MEMENTO_ACCESS_KEY>` 헤더로 인증하며 이후 세션으로 유지된다. Legacy SSE는 `/sse?accessKey=<MEMENTO_ACCESS_KEY>` 쿼리 파라미터로 인증한다.
 
 ---

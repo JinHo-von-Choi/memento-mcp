@@ -1467,6 +1467,16 @@ See **[INSTALL.en.md](INSTALL.en.md)** for full installation, migration, client 
 | `PUT` | `/v1/internal/model/nothing/keys/:id` | Update API key status (active ↔ inactive) |
 | `DELETE` | `/v1/internal/model/nothing/keys/:id` | Delete API key |
 
+### /health Endpoint Policy
+
+| Dependency | Type | Response when down |
+|-----------|------|-------------------|
+| PostgreSQL | Required | 503 (degraded) |
+| Redis | Optional | 200 (healthy, with warnings) |
+
+The server returns healthy (200) even when Redis is disabled (`REDIS_ENABLED=false`) or connection fails.
+L1 cache and Working Memory are disabled, but core memory storage/retrieval works with PostgreSQL alone.
+
 ---
 
 ## 13. References
