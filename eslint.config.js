@@ -29,7 +29,7 @@ export default [
     }
   },
   {
-    files: ["tests/*.test.js"],
+    files: ["tests/**/*.test.js"],
     languageOptions: {
       globals: {
         describe:   "readonly",
