@@ -1,115 +1,189 @@
 /**
- * Admin 키/그룹 UI 렌더링 검증 테스트
+ * admin.js -- Keys/Groups 렌더러 단위 테스트
  *
  * 작성자: 최진호
  * 작성일: 2026-03-26
  */
 
-import { test, describe, before } from "node:test";
-import assert                     from "node:assert/strict";
-import { loadAdminModule }        from "./admin-dom-shim.js";
+import { test, describe, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import { loadAdmin, flatQuery } from "./admin-test-helper.js";
 
 let mod;
 
-before(() => {
-  mod = loadAdminModule();
+/* ================================================================
+   Keys View
+   ================================================================ */
+
+describe("renderKeyKpiRow", () => {
+  beforeEach(() => { mod = loadAdmin(); });
+
+  test("4개 KPI 카드 (glass-panel)", () => {
+    const keys = [
+      { id: "1", status: "active", groups: ["A"] },
+      { id: "2", status: "active", groups: [] },
+      { id: "3", status: "inactive", groups: ["A"] }
+    ];
+    const grid = mod.renderKeyKpiRow(keys);
+    assert.equal(grid.className, "grid grid-cols-4 gap-4 mb-8");
+    const cards = grid.querySelectorAll(".glass-panel");
+    assert.equal(cards.length, 4);
+  });
+
+  test("ACTIVE KEYS, REVOKED KEYS, TOTAL GROUPS, NO GROUP 라벨", () => {
+    const keys = [{ id: "1", status: "active", groups: [] }];
+    const grid = mod.renderKeyKpiRow(keys);
+    const labels = grid.querySelectorAll(".font-label").map(l => l.textContent);
+    assert.ok(labels.includes("ACTIVE KEYS"));
+    assert.ok(labels.includes("REVOKED KEYS"));
+    assert.ok(labels.includes("TOTAL GROUPS"));
+    assert.ok(labels.includes("NO GROUP"));
+  });
+
+  test("값에 font-headline text-3xl 사용", () => {
+    const keys = [{ id: "1", status: "active", groups: [] }];
+    const grid = mod.renderKeyKpiRow(keys);
+    const vals = grid.querySelectorAll(".text-3xl");
+    assert.equal(vals.length, 4);
+  });
+
+  test("left accent bar 존재", () => {
+    const keys = [];
+    const grid = mod.renderKeyKpiRow(keys);
+    const bars = grid.querySelectorAll(".absolute");
+    assert.equal(bars.length, 4);
+  });
 });
 
 describe("renderKeyTable", () => {
-  test("creates table with correct structure", () => {
-    mod.state.selectedKeyId = null;
-    const keys = [
-      { id: "k1", name: "test-key", status: "active", key_prefix: "mmcp_abc", daily_limit: 10000, today_calls: 5, created_at: "2026-01-01T00:00:00Z" }
-    ];
-    const result = mod.renderKeyTable(keys);
-    assert.ok(result.className.includes("bg-surface-container-low"), "wrapper should use bg-surface-container-low");
+  beforeEach(() => { mod = loadAdmin(); });
 
-    const tableWrap = result.children[0];
-    assert.ok(tableWrap, "should have overflow wrapper");
-    const table = tableWrap.children[0];
-    assert.ok(table);
-    assert.equal(table.id, "keys-table");
+  test("glass-panel wrapper", () => {
+    const wrap = mod.renderKeyTable([]);
+    assert.ok(wrap.className.includes("glass-panel"));
   });
 
-  test("creates row for each key", () => {
-    mod.state.selectedKeyId = null;
-    const keys = [
-      { id: "k1", name: "key-a", status: "active", key_prefix: "mmcp_a", daily_limit: 1000, created_at: null },
-      { id: "k2", name: "key-b", status: "inactive", key_prefix: "mmcp_b", daily_limit: 500, created_at: null }
-    ];
-    const result = mod.renderKeyTable(keys);
-    const table  = result.children[0].children[0];
-    const tbody  = table.children[1];
-    assert.equal(tbody.children.length, 2, "should have 2 data rows");
+  test("7 columns in thead", () => {
+    const wrap = mod.renderKeyTable([]);
+    const ths = flatQuery(wrap, "th");
+    assert.equal(ths.length, 7);
   });
 
-  test("key row includes prefix in mono font", () => {
-    mod.state.selectedKeyId = null;
+  test("footer에 entry count 표시", () => {
     const keys = [
-      { id: "k1", name: "key-a", status: "active", key_prefix: "mmcp_test", daily_limit: 1000 }
+      { id: "k1", name: "A", status: "active" },
+      { id: "k2", name: "B", status: "active" }
     ];
-    const result = mod.renderKeyTable(keys);
-    const table  = result.children[0].children[0];
-    const tbody  = table.children[1];
-    const row    = tbody.children[0];
-    const prefixTd = row.children[1];
-    assert.ok(prefixTd.className.includes("font-mono"), "prefix should use mono font");
-    assert.equal(prefixTd.textContent, "mmcp_test");
+    const wrap = mod.renderKeyTable(keys);
+    const all = [];
+    function walk(n) { all.push(n); (n.children ?? []).forEach(walk); }
+    walk(wrap);
+    assert.ok(all.some(n => (n.textContent ?? "").includes("2 entries")));
   });
 });
 
-describe("renderKeyKpiRow", () => {
-  test("creates 4 KPI cards", () => {
-    const keys = [
-      { id: "k1", status: "active", groups: ["CORE"] },
-      { id: "k2", status: "inactive", groups: [] },
-      { id: "k3", status: "active", groups: ["API"] }
-    ];
-    const result = mod.renderKeyKpiRow(keys);
-    assert.ok(result.className.includes("grid-cols-4"), "should be 4-column grid");
-    assert.equal(result.children.length, 4, "should have 4 KPI cards");
+describe("renderKeyInspector", () => {
+  beforeEach(() => { mod = loadAdmin(); mod.state.groups = []; });
+
+  test("key=null이면 empty placeholder", () => {
+    const panel = mod.renderKeyInspector(null);
+    const all = [];
+    function walk(n) { all.push(n); (n.children ?? []).forEach(walk); }
+    walk(panel);
+    assert.ok(all.some(n => (n.textContent ?? "").includes("SELECT A KEY TO INSPECT")));
+  });
+
+  test("key identity card with border-l-2 border-primary", () => {
+    const key = { id: "k1", name: "TestKey", key_prefix: "m_test", status: "active", today_calls: 10, created_at: "2024-01-01" };
+    const panel = mod.renderKeyInspector(key);
+    const idCard = panel.querySelector(".border-l-2");
+    assert.ok(idCard);
+  });
+
+  test("REVOKE KEY + DELETE PERMANENTLY 버튼", () => {
+    const key = { id: "k1", name: "K", key_prefix: "m_k", status: "active" };
+    const panel = mod.renderKeyInspector(key);
+    const buttons = flatQuery(panel, "button");
+    const texts = buttons.map(b => b.textContent);
+    assert.ok(texts.includes("REVOKE KEY"));
+    assert.ok(texts.includes("DELETE PERMANENTLY"));
+  });
+
+  test("ASSIGNED GROUPS + ADD GROUP", () => {
+    const key = { id: "k1", name: "K", key_prefix: "m_k", status: "active", groups: ["G1"] };
+    const panel = mod.renderKeyInspector(key);
+    const all = [];
+    function walk(n) { all.push(n); (n.children ?? []).forEach(walk); }
+    walk(panel);
+    assert.ok(all.some(n => (n.textContent ?? "").includes("ASSIGNED GROUPS")));
+    assert.ok(all.some(n => (n.textContent ?? "").includes("ADD GROUP")));
   });
 });
 
-describe("renderGroupCards", () => {
-  test("shows empty message when no groups", () => {
-    mod.state.selectedGroupId = null;
-    const result = mod.renderGroupCards([]);
-    assert.ok(result.textContent.includes("그룹이 없습니다"));
+/* ================================================================
+   Groups View
+   ================================================================ */
+
+describe("renderGroupKpiRow", () => {
+  beforeEach(() => { mod = loadAdmin(); });
+
+  test("4개 KPI 카드 (glass-panel)", () => {
+    const groups = [{ id: "g1", name: "A", member_count: 2 }];
+    const keys = [{ id: "k1", groups: ["A"] }];
+    const grid = mod.renderGroupKpiRow(groups, keys);
+    const cards = grid.querySelectorAll(".glass-panel");
+    assert.equal(cards.length, 4);
   });
 
-  test("creates card for each group", () => {
-    mod.state.selectedGroupId = null;
-    const groups = [
-      { id: "g1", name: "team-a", description: "Alpha team", member_count: 3 },
-      { id: "g2", name: "team-b", description: null, member_count: 0 }
-    ];
-    const result = mod.renderGroupCards(groups);
-    assert.ok(result.className.includes("grid"), "should be a grid");
-    assert.equal(result.children.length, 2, "should have 2 group cards");
+  test("TOTAL GROUPS, TOTAL MEMBERS, EMPTY GROUPS, UNASSIGNED KEYS", () => {
+    const grid = mod.renderGroupKpiRow([], []);
+    const labels = grid.querySelectorAll(".font-label").map(l => l.textContent);
+    assert.ok(labels.includes("TOTAL GROUPS"));
+    assert.ok(labels.includes("TOTAL MEMBERS"));
+    assert.ok(labels.includes("EMPTY GROUPS"));
+    assert.ok(labels.includes("UNASSIGNED KEYS"));
+  });
+});
+
+describe("renderGroupTable", () => {
+  beforeEach(() => { mod = loadAdmin(); });
+
+  test("glass-panel wrapper", () => {
+    const wrap = mod.renderGroupTable([]);
+    assert.ok(wrap.className.includes("glass-panel"));
   });
 
-  test("group card displays name", () => {
-    mod.state.selectedGroupId = null;
-    const groups = [
-      { id: "g1", name: "team-alpha", description: "Test", member_count: 5 }
-    ];
-    const result = mod.renderGroupCards(groups);
-    const card   = result.children[0];
-    const nameRow = card.children[0];
-    const nameEl  = nameRow.children.find(c => c.className && c.className.includes("font-bold"));
-    assert.equal(nameEl.textContent, "team-alpha");
+  test("5 columns", () => {
+    const wrap = mod.renderGroupTable([]);
+    const ths = flatQuery(wrap, "th");
+    assert.equal(ths.length, 5);
+  });
+});
+
+describe("renderGroupInspector", () => {
+  beforeEach(() => { mod = loadAdmin(); });
+
+  test("selected=null이면 empty placeholder", () => {
+    const panel = mod.renderGroupInspector(null, []);
+    const all = [];
+    function walk(n) { all.push(n); (n.children ?? []).forEach(walk); }
+    walk(panel);
+    assert.ok(all.some(n => (n.textContent ?? "").includes("SELECT A GROUP TO INSPECT")));
   });
 
-  test("marks selected group card with border-primary", () => {
-    mod.state.selectedGroupId = "g2";
-    const groups = [
-      { id: "g1", name: "team-a" },
-      { id: "g2", name: "team-b" }
-    ];
-    const result = mod.renderGroupCards(groups);
-    const card2  = result.children[1];
-    assert.ok(card2.className.includes("border-primary"));
-    mod.state.selectedGroupId = null;
+  test("group identity card with border-l-2 border-secondary", () => {
+    const group = { id: "g1", name: "TestGroup", description: "Test", member_count: 2 };
+    const panel = mod.renderGroupInspector(group, []);
+    const idCard = panel.querySelector(".border-secondary");
+    assert.ok(idCard);
+  });
+
+  test("ADD MEMBER + DELETE GROUP 버튼", () => {
+    const group = { id: "g1", name: "G", member_count: 0 };
+    const panel = mod.renderGroupInspector(group, []);
+    const buttons = flatQuery(panel, "button");
+    const texts = buttons.map(b => b.textContent);
+    assert.ok(texts.includes("ADD MEMBER"));
+    assert.ok(texts.includes("DELETE GROUP"));
   });
 });
