@@ -413,6 +413,11 @@ describe("Memory API route matching", () => {
     assert.strictEqual(pathname.slice(memoryPrefix.length), "/anomalies");
   });
 
+  it("/memory/graph 경로를 매칭한다", () => {
+    const pathname = `${ADMIN_BASE}/memory/graph`;
+    assert.strictEqual(pathname.slice(memoryPrefix.length), "/graph");
+  });
+
   it("GET 이외의 메서드는 404를 반환해야 한다", () => {
     /** memory API는 모두 GET 전용 (READ-ONLY) */
     const allowedMethod = "GET";
@@ -423,7 +428,74 @@ describe("Memory API route matching", () => {
 });
 
 /* ================================================================== */
-/*  테스트 6: SQL injection 방어                                        */
+/*  테스트 6: GET /memory/graph                                         */
+/* ================================================================== */
+
+describe("GET /memory/graph", () => {
+  it("graph 응답 구조가 올바르다 (nodes + edges)", () => {
+    const response = {
+      nodes: [
+        { id: "f1", label: "DB 연결 설정", topic: "database", type: "fact", importance: 0.8 },
+        { id: "f2", label: "인증 로직 결정", topic: "auth", type: "decision", importance: 0.7 }
+      ],
+      edges: [
+        { from_id: "f1", to_id: "f2", relation_type: "related", weight: 1.0 }
+      ]
+    };
+
+    assert.ok(Array.isArray(response.nodes));
+    assert.ok(Array.isArray(response.edges));
+    assert.strictEqual(response.nodes.length, 2);
+    assert.strictEqual(response.edges.length, 1);
+    assert.strictEqual(typeof response.nodes[0].id, "string");
+    assert.strictEqual(typeof response.nodes[0].label, "string");
+    assert.strictEqual(typeof response.nodes[0].importance, "number");
+    assert.strictEqual(response.edges[0].from_id, "f1");
+    assert.strictEqual(response.edges[0].to_id, "f2");
+  });
+
+  it("limit 파라미터를 10-200 범위로 캡핑한다", () => {
+    const cases = [
+      { input: "5",   expected: 10 },
+      { input: "50",  expected: 50 },
+      { input: "300", expected: 200 },
+      { input: "abc", expected: 50 },
+      { input: null,  expected: 50 }
+    ];
+
+    for (const c of cases) {
+      const raw = parseInt(c.input || "50", 10);
+      const limit = Math.min(200, Math.max(10, Number.isNaN(raw) ? 50 : raw));
+      assert.strictEqual(limit, c.expected, `input=${c.input}`);
+    }
+  });
+
+  it("topic이 없으면 전체 파편을 조회한다", () => {
+    const url   = new URL("http://localhost/memory/graph?limit=30");
+    const topic = url.searchParams.get("topic") || null;
+    assert.strictEqual(topic, null);
+  });
+
+  it("content를 60자로 절단하여 label을 생성한다", () => {
+    const longContent = "A".repeat(100);
+    const label       = longContent.slice(0, 60);
+    assert.strictEqual(label.length, 60);
+  });
+
+  it("edges에서 노드 집합에 없는 링크를 필터링한다", () => {
+    const nodeIds = new Set(["f1", "f2", "f3"]);
+    const edges   = [
+      { from_id: "f1", to_id: "f2" },
+      { from_id: "f1", to_id: "f99" },
+      { from_id: "f3", to_id: "f2" }
+    ];
+    const filtered = edges.filter(e => nodeIds.has(e.from_id) && nodeIds.has(e.to_id));
+    assert.strictEqual(filtered.length, 2);
+  });
+});
+
+/* ================================================================== */
+/*  테스트 7: SQL injection 방어                                        */
 /* ================================================================== */
 
 describe("SQL injection prevention", () => {

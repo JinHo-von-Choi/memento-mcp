@@ -93,6 +93,7 @@ function renderView() {
     case "memory":    renderMemory(container);     break;
     case "sessions":  renderSessions(container); break;
     case "logs":      renderLogs(container); break;
+    case "graph":     renderGraph(container); break;
     default:          renderOverview(container);
   }
 }
@@ -318,7 +319,8 @@ const NAV_ITEMS = [
   { id: "groups",   label: "그룹",       icon: "group" },
   { id: "memory",   label: "메모리 운영", icon: "memory" },
   { id: "sessions", label: "세션",       icon: "settings_input_component" },
-  { id: "logs",     label: "로그",       icon: "terminal" }
+  { id: "logs",     label: "로그",       icon: "terminal" },
+  { id: "graph",    label: "지식 그래프", icon: "hub" }
 ];
 
 function renderSidebar() {
@@ -2517,6 +2519,201 @@ async function renderSessions(container) {
 }
 
 /* ================================================================
+   11.9. Knowledge Graph
+   ================================================================ */
+
+async function renderGraph(container) {
+  container.textContent = "";
+
+  const wrap = document.createElement("div");
+  wrap.className = "space-y-6";
+
+  /* Header */
+  const header = document.createElement("div");
+  header.className = "flex items-center justify-between";
+
+  const title = document.createElement("h2");
+  title.className = "text-2xl font-headline font-bold tracking-tight";
+  title.textContent = "Knowledge Graph";
+  header.appendChild(title);
+
+  const statsSpan = document.createElement("span");
+  statsSpan.id = "graph-stats";
+  statsSpan.className = "text-sm text-slate-400 font-mono";
+  statsSpan.textContent = "--";
+  header.appendChild(statsSpan);
+
+  wrap.appendChild(header);
+
+  /* Controls */
+  const controls = document.createElement("div");
+  controls.className = "glass-panel p-4 rounded-sm flex items-center gap-4 flex-wrap";
+
+  const topicInput = document.createElement("input");
+  topicInput.type = "text";
+  topicInput.id = "graph-topic";
+  topicInput.placeholder = "Topic filter";
+  topicInput.className = "bg-surface-container border border-outline-variant/30 rounded-sm px-3 py-1.5 text-sm text-on-surface focus:border-primary focus:outline-none w-48";
+
+  const limitLabel = document.createElement("label");
+  limitLabel.className = "text-sm text-slate-400 flex items-center gap-2";
+  limitLabel.textContent = "Limit: ";
+
+  const limitRange = document.createElement("input");
+  limitRange.type = "range";
+  limitRange.id = "graph-limit";
+  limitRange.min = "10";
+  limitRange.max = "200";
+  limitRange.value = "50";
+  limitRange.className = "w-32 accent-primary";
+
+  const limitValue = document.createElement("span");
+  limitValue.id = "graph-limit-value";
+  limitValue.className = "font-mono text-on-surface w-8";
+  limitValue.textContent = "50";
+
+  limitRange.addEventListener("input", () => {
+    limitValue.textContent = limitRange.value;
+  });
+
+  limitLabel.appendChild(limitRange);
+  limitLabel.appendChild(limitValue);
+
+  const loadBtn = document.createElement("button");
+  loadBtn.className = "btn btn-primary";
+  loadBtn.textContent = "LOAD";
+  loadBtn.addEventListener("click", loadGraph);
+
+  controls.appendChild(topicInput);
+  controls.appendChild(limitLabel);
+  controls.appendChild(loadBtn);
+
+  /* Legend */
+  const TYPE_COLORS = {
+    fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
+    procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280"
+  };
+  const legend = document.createElement("div");
+  legend.className = "flex items-center gap-3 ml-auto";
+  for (const [t, c] of Object.entries(TYPE_COLORS)) {
+    const chip = document.createElement("span");
+    chip.className = "flex items-center gap-1 text-xs text-slate-400";
+    const dot = document.createElement("span");
+    dot.className = "inline-block w-2.5 h-2.5 rounded-full";
+    dot.style.backgroundColor = c;
+    chip.appendChild(dot);
+    chip.appendChild(document.createTextNode(t));
+    legend.appendChild(chip);
+  }
+  controls.appendChild(legend);
+
+  wrap.appendChild(controls);
+
+  /* SVG Canvas */
+  const canvasWrap = document.createElement("div");
+  canvasWrap.className = "glass-panel rounded-sm overflow-hidden";
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg   = document.createElementNS(svgNS, "svg");
+  svg.id = "graph-canvas";
+  svg.setAttribute("width", "100%");
+  svg.setAttribute("height", "500");
+  svg.style.backgroundColor = "#0e1322";
+  canvasWrap.appendChild(svg);
+
+  wrap.appendChild(canvasWrap);
+  container.appendChild(wrap);
+
+  /* Auto-load */
+  loadGraph();
+}
+
+async function loadGraph() {
+  const topic = document.getElementById("graph-topic")?.value || "";
+  const limit = document.getElementById("graph-limit")?.value || "50";
+  const res   = await api(`/memory/graph?topic=${encodeURIComponent(topic)}&limit=${limit}`);
+
+  if (!res.ok || !res.data) {
+    showToast("그래프 데이터 로딩 실패", "error");
+    return;
+  }
+  const data = res.data;
+
+  if (typeof d3 === "undefined") {
+    showToast("D3.js가 로드되지 않았습니다", "error");
+    return;
+  }
+
+  const TYPE_COLORS = {
+    fact: "#5b8ef0", decision: "#8b5cf6", error: "#ef4444",
+    procedure: "#22c55e", preference: "#f59e0b", relation: "#6b7280"
+  };
+
+  const svg = d3.select("#graph-canvas");
+  svg.selectAll("*").remove();
+
+  const width  = svg.node().clientWidth  || 800;
+  const height = svg.node().clientHeight || 500;
+
+  const nodeIds = new Set(data.nodes.map(n => n.id));
+  const links   = data.edges
+    .filter(e => nodeIds.has(e.from_id) && nodeIds.has(e.to_id))
+    .map(e => ({ source: e.from_id, target: e.to_id, type: e.relation_type, weight: e.weight }));
+
+  const sim = d3.forceSimulation(data.nodes)
+    .force("link",   d3.forceLink(links).id(d => d.id).distance(80))
+    .force("charge", d3.forceManyBody().strength(-200))
+    .force("center", d3.forceCenter(width / 2, height / 2));
+
+  const link = svg.append("g")
+    .selectAll("line")
+    .data(links)
+    .join("line")
+    .attr("stroke", "#374151")
+    .attr("stroke-opacity", 0.6)
+    .attr("stroke-width", d => Math.min(4, d.weight || 1));
+
+  const node = svg.append("g")
+    .selectAll("circle")
+    .data(data.nodes)
+    .join("circle")
+    .attr("r", d => 4 + (d.importance || 0.5) * 10)
+    .attr("fill", d => TYPE_COLORS[d.type] || "#6b7280")
+    .attr("stroke", "#1a1a2e")
+    .attr("stroke-width", 1.5)
+    .call(d3.drag()
+      .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag",  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on("end",   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    );
+
+  node.append("title").text(d => `[${d.type}] ${d.label}`);
+
+  const labels = svg.append("g")
+    .selectAll("text")
+    .data(data.nodes)
+    .join("text")
+    .text(d => d.label.slice(0, 20))
+    .attr("font-size", "10px")
+    .attr("fill", "#9ca3af")
+    .attr("dx", 12)
+    .attr("dy", 4);
+
+  sim.on("tick", () => {
+    link
+      .attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+    node.attr("cx", d => d.x).attr("cy", d => d.y);
+    labels.attr("x", d => d.x).attr("y", d => d.y);
+  });
+
+  const statsEl = document.getElementById("graph-stats");
+  if (statsEl) {
+    statsEl.textContent = `${data.nodes.length} nodes, ${links.length} edges`;
+  }
+}
+
+/* ================================================================
    11.8. Log Viewer
    ================================================================ */
 
@@ -3737,6 +3934,8 @@ if (typeof module !== "undefined" && module.exports) { // eslint-disable-line no
     renderSessionTable,
     renderSessionInspector,
     renderLogKpiRow,
+    renderGraph,
+    loadGraph,
     renderLogViewer,
     renderLogSidebar,
     renderLogFilterBar,
