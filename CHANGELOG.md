@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.0.1] - 2026-03-29
+
+### Changed
+- README.md: 1,486줄 → 166줄 입문 가이드로 재작성
+- README.en.md: 한국어 README와 1:1 구조 동기화 재작성
+
+### Added
+- docs/architecture.md: 시스템 구조, DB 스키마, 3계층 검색, TTL 계층
+- docs/configuration.md: 환경 변수, MEMORY_CONFIG, 임베딩 Provider, 테스트
+- docs/api-reference.md: HTTP 엔드포인트, 프롬프트, 리소스, 사용 흐름
+- docs/internals.md: MemoryEvaluator, MemoryConsolidator, 모순 탐지
+- docs/cli.md: CLI 9개 명령어
+- docs/benchmark.md: LongMemEval-S 벤치마크 상세 분석 리포트
+- README/README.en: 벤치마크 성능 요약 섹션 (recall@5 88.3%, QA 45.4%)
+
+### Removed
+- README.simple.md: 새 README가 이미 간결하므로 삭제
+
 ## [2.0.0] - 2026-03-28
 
 ### Added

@@ -137,7 +137,7 @@ cp .env.example .env
 # Edit .env: set DATABASE_URL, MEMENTO_ACCESS_KEY, and other required values
 ```
 
-For the full list of environment variables, see [README.en.md — Configuration](../README.en.md#10-configuration).
+For the full list of environment variables, see [Configuration — Environment Variables](configuration.md#environment-variables).
 
 ## Starting the Server
 

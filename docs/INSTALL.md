@@ -126,7 +126,7 @@ ALLOWED_ORIGINS         - CORS 허용 Origin 목록 (쉼표 구분)
 RERANKER_ENABLED        - cross-encoder reranking 활성화 (기본: false)
 ```
 
-환경 변수 전체 목록은 [README.md — 환경 변수](../README.md#환경-변수) 참조.
+환경 변수 전체 목록은 [Configuration — 환경 변수](configuration.md#환경-변수) 참조.
 
 ## CLI 사용법
 
