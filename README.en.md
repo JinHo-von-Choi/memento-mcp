@@ -58,6 +58,8 @@ node server.js
 
 Once the server is running, verify it with the [First Memory Flow](docs/getting-started/first-memory-flow.md).
 
+For other platforms, see the [Compatible Platforms](#compatible-platforms) table above.
+
 ### Claude Code Integration
 
 Add to `.claude/settings.json`:
@@ -82,6 +84,25 @@ See [Claude Code Configuration](docs/getting-started/claude-code.md) for details
 | Linux / macOS | Recommended | [Quick Start](docs/getting-started/quickstart.md) |
 | Windows + WSL2 | Most recommended | [Windows WSL2 Setup](docs/getting-started/windows-wsl2.md) |
 | Windows + PowerShell | Limited support | [Windows PowerShell Setup](docs/getting-started/windows-powershell.md) |
+
+## Compatible Platforms
+
+Memento is a standard MCP (Model Context Protocol) server. It works with any AI platform that supports MCP — not just Claude Code.
+
+| Platform | Config Location | Transport |
+|----------|----------------|-----------|
+| Claude Code | ~/.claude/settings.json | Streamable HTTP |
+| Claude Desktop | claude_desktop_config.json | Streamable HTTP |
+| Cursor | .cursor/mcp.json | Streamable HTTP |
+| Windsurf | ~/.codeium/windsurf/mcp_config.json | Streamable HTTP |
+| GitHub Copilot | VS Code MCP Marketplace | Streamable HTTP |
+| Codex CLI | ~/.codex/config.toml | Streamable HTTP |
+| ChatGPT Desktop | Developer Mode > Apps | Streamable HTTP |
+| Continue | config.json | Streamable HTTP |
+
+Common setup: Server URL `http://localhost:57332/mcp`, Authorization header `Bearer YOUR_ACCESS_KEY`.
+
+See [integration guides](docs/getting-started/) for platform-specific setup.
 
 ## Core Features
 

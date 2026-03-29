@@ -58,6 +58,8 @@ node server.js
 
 서버가 뜬 뒤에는 [First Memory Flow](docs/getting-started/first-memory-flow.md)로 동작을 검증한다.
 
+다른 플랫폼 설정은 위 [호환 플랫폼](#호환-플랫폼) 테이블 참조.
+
 ### Claude Code 연동
 
 `.claude/settings.json`에 추가:
@@ -82,6 +84,25 @@ node server.js
 | Linux / macOS | 권장 | [Quick Start](docs/getting-started/quickstart.md) |
 | Windows + WSL2 | 가장 권장 | [Windows WSL2 Setup](docs/getting-started/windows-wsl2.md) |
 | Windows + PowerShell | 제한 지원 | [Windows PowerShell Setup](docs/getting-started/windows-powershell.md) |
+
+## 호환 플랫폼
+
+Memento는 MCP(Model Context Protocol) 표준 서버다. Claude Code뿐 아니라, MCP를 지원하는 모든 AI 플랫폼에서 사용할 수 있다.
+
+| 플랫폼 | 설정 위치 | 연결 방식 |
+|--------|----------|-----------|
+| Claude Code | ~/.claude/settings.json | Streamable HTTP |
+| Claude Desktop | claude_desktop_config.json | Streamable HTTP |
+| Cursor | .cursor/mcp.json | Streamable HTTP |
+| Windsurf | ~/.codeium/windsurf/mcp_config.json | Streamable HTTP |
+| GitHub Copilot | VS Code MCP Marketplace | Streamable HTTP |
+| Codex CLI | ~/.codex/config.toml | Streamable HTTP |
+| ChatGPT Desktop | Developer Mode > Apps | Streamable HTTP |
+| Continue | config.json | Streamable HTTP |
+
+공통 설정: 서버 URL `http://localhost:57332/mcp`, Authorization 헤더에 `Bearer YOUR_ACCESS_KEY`.
+
+플랫폼별 상세 설정은 [연동 가이드](docs/getting-started/) 참조.
 
 ## 핵심 기능
 
