@@ -95,6 +95,12 @@ See [Claude Code Configuration](docs/getting-started/claude-code.md) for details
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
 
+## Memory vs Rules
+
+Memory fragments injected by Memento have lower priority than the system prompt. Factual memories like "we use PostgreSQL 15" work well, but behavioral rules like "always use Given-When-Then pattern in tests" may be ignored when they conflict with the system prompt.
+
+For behavioral rules, use higher-priority channels such as CLAUDE.md, AGENTS.md, hooks, or skills.
+
 ## Benchmark
 
 Performance on [LongMemEval-S](https://arxiv.org/abs/2407.15460) (500 questions):

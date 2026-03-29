@@ -95,6 +95,12 @@ node server.js
 
 전체 MCP 도구 목록은 [SKILL.md](SKILL.md) 참조.
 
+## 기억 vs 규칙
+
+Memento가 주입하는 기억 파편은 시스템 프롬프트보다 우선순위가 낮다. "PostgreSQL 15를 쓴다"같은 사실 기억은 잘 작동하지만, "테스트 작성 시 반드시 Given-When-Then 패턴을 쓸 것"같은 행동 규칙은 시스템 프롬프트와 충돌하면 무시될 수 있다.
+
+행동 규칙은 CLAUDE.md, AGENTS.md, 훅(hooks), 스킬(skills) 등 우선순위가 높은 채널에 설정하는 것을 권장한다.
+
 ## 벤치마크
 
 [LongMemEval-S](https://arxiv.org/abs/2407.15460) 500문항 기준 성능:
