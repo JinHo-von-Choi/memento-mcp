@@ -165,6 +165,13 @@ Memento는 사실 기억(fact cache)에 최적화되어 있다. 전후관계가 
 | [INSTALL.md](docs/INSTALL.md) | 마이그레이션, 훅 설정, 상세 설치 |
 | [CHANGELOG](CHANGELOG.md) | 버전별 변경사항 |
 
+## 운영
+
+- `/health`: DB, Redis, pgvector, 워커 상태를 종합 점검. 부분 장애 시 degraded 응답.
+- Rate Limiting: API 키당 100/분, IP당 30/분. 환경변수로 조정 가능.
+- 워커 복구: 임베딩/평가 워커가 에러 시 지수 백오프(1s→60s)로 자동 재시도.
+- Graceful Shutdown: SIGTERM 시 진행 중 워커 완료 대기(30초) 후 세션 auto-reflect 실행.
+
 ## 알려진 제한사항
 
 - L1 Redis 캐시는 API 키 기반 격리만 지원한다. multi-agent 환경에서 에이전트 간 격리는 L2/L3에서 적용된다.

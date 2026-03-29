@@ -15,6 +15,8 @@
 | ALLOWED_ORIGINS | (none) | Allowed Origins list. Comma-separated. All origins allowed when unset |
 | RATE_LIMIT_WINDOW_MS | 60000 | Rate limiting window size (ms) |
 | RATE_LIMIT_MAX_REQUESTS | 120 | Max requests per IP per window |
+| RATE_LIMIT_PER_IP | 30 | Per-IP requests per minute (unauthenticated) |
+| RATE_LIMIT_PER_KEY | 100 | Per-API-key requests per minute (authenticated) |
 | CONSOLIDATE_INTERVAL_MS | 21600000 | Auto-maintenance (consolidate) interval (ms). Default 6 hours |
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator queue size cap (older jobs dropped on overflow) |
 | OAUTH_ALLOWED_REDIRECT_URIS | (none) | OAuth redirect_uri allowed prefixes (comma-separated, only localhost allowed when unset) |

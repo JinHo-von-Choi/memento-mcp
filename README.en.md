@@ -165,6 +165,13 @@ Memento is optimized for fact caching. When narrative context matters:
 | [INSTALL.md](docs/INSTALL.en.md) | Migrations, hook setup, detailed installation |
 | [CHANGELOG](CHANGELOG.md) | Version history |
 
+## Operations
+
+- `/health`: Comprehensive check of DB, Redis, pgvector, and worker status. Returns degraded on partial failure.
+- Rate Limiting: 100/min per API key, 30/min per IP. Configurable via environment variables.
+- Worker Recovery: Embedding/evaluator workers use exponential backoff (1s→60s) on errors.
+- Graceful Shutdown: On SIGTERM, waits up to 30s for workers to drain, then runs session auto-reflect.
+
 ## Known Limitations
 
 - L1 Redis cache supports API key-based isolation only. Agent-level isolation in multi-agent deployments is enforced at L2/L3.

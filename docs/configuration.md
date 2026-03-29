@@ -15,6 +15,8 @@
 | ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 전체 허용 |
 | RATE_LIMIT_WINDOW_MS | 60000 | Rate limiting 윈도우 크기 (ms) |
 | RATE_LIMIT_MAX_REQUESTS | 120 | 윈도우 내 IP당 최대 요청 수 |
+| RATE_LIMIT_PER_IP | 30 | IP당 분당 요청 한도 (미인증 요청) |
+| RATE_LIMIT_PER_KEY | 100 | API 키당 분당 요청 한도 (인증된 요청) |
 | CONSOLIDATE_INTERVAL_MS | 3600000 | 자동 유지보수(consolidate) 실행 간격 (ms). 기본 1시간 |
 | EVALUATOR_MAX_QUEUE | 100 | MemoryEvaluator 큐 크기 상한 (초과 시 오래된 작업 드롭) |
 | OAUTH_ALLOWED_REDIRECT_URIS | (없음) | OAuth redirect_uri 허용 prefix (쉼표 구분, 미설정 시 localhost만 허용) |

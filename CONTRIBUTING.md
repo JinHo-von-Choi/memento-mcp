@@ -9,6 +9,24 @@
 5. `npm run migrate`
 6. `npm test`
 
+### Full Development Stack
+
+For a complete local environment with PostgreSQL + Redis:
+
+```bash
+docker-compose -f docker-compose.dev.yml up -d
+cp .env.example .env  # Edit DB credentials to match dev compose
+npm install
+npm run migrate
+node server.js
+```
+
+### Docker Build
+
+```bash
+docker build -t memento-mcp .
+```
+
 ## Code Style
 
 - ESM imports only (no require)
