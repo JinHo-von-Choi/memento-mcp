@@ -107,7 +107,7 @@ Performance on [LongMemEval-S](https://arxiv.org/abs/2407.15460) (500 questions)
 
 Retrieval exceeds 80% recall on 5 of 6 question types. The sole weak spot is assistant-utterance queries (53.6%), caused by a mismatch between storage format and query semantics.
 
-See [Benchmark Report](docs/benchmark.md) for the full analysis.
+See [Benchmark Report](docs/benchmark.en.md) for the full analysis.
 
 ## Who Is This For
 
@@ -120,14 +120,14 @@ See [Benchmark Report](docs/benchmark.md) for the full analysis.
 | Document | Contents |
 |----------|----------|
 | [Quick Start](docs/getting-started/quickstart.md) | Detailed installation guide |
-| [Architecture](docs/architecture.md) | System design, DB schema, 3-tier search, TTL |
-| [Configuration](docs/configuration.md) | Environment variables, MEMORY_CONFIG, embedding providers |
-| [API Reference](docs/api-reference.md) | HTTP endpoints, prompts, resources |
-| [CLI](docs/cli.md) | 9 terminal commands |
-| [Internals](docs/internals.md) | Evaluator, consolidator, contradiction detection |
-| [Benchmark](docs/benchmark.md) | Full LongMemEval-S benchmark analysis |
+| [Architecture](docs/architecture.en.md) | System design, DB schema, 3-tier search, TTL |
+| [Configuration](docs/configuration.en.md) | Environment variables, MEMORY_CONFIG, embedding providers |
+| [API Reference](docs/api-reference.en.md) | HTTP endpoints, prompts, resources |
+| [CLI](docs/cli.en.md) | 9 terminal commands |
+| [Internals](docs/internals.en.md) | Evaluator, consolidator, contradiction detection |
+| [Benchmark](docs/benchmark.en.md) | Full LongMemEval-S benchmark analysis |
 | [SKILL.md](SKILL.md) | Full MCP tool reference |
-| [INSTALL.md](docs/INSTALL.md) | Migrations, hook setup, detailed installation |
+| [INSTALL.md](docs/INSTALL.en.md) | Migrations, hook setup, detailed installation |
 | [CHANGELOG](CHANGELOG.md) | Version history |
 
 ## Tech Stack

@@ -14,6 +14,11 @@
 - docs/cli.md: CLI 9개 명령어
 - docs/benchmark.md: LongMemEval-S 벤치마크 상세 분석 리포트
 - README/README.en: 벤치마크 성능 요약 섹션 (recall@5 88.3%, QA 45.4%)
+- docs/*.en.md: 영문 분리 문서 6개 (architecture, configuration, api-reference, internals, cli, benchmark)
+- docs/benchmark.md: 벤치마크 리포트 한국어 번역
+
+### Changed (i18n)
+- README.en.md: 영문 docs(.en.md)로 링크 변경
 
 ### Removed
 - README.simple.md: 새 README가 이미 간결하므로 삭제
