@@ -52,7 +52,12 @@ async function migrate() {
 
     for (const file of pending) {
       console.log(`  Applying ${file}...`);
-      const sql = fs.readFileSync(path.join(MIGRATION_DIR, file), "utf-8");
+      let sql = fs.readFileSync(path.join(MIGRATION_DIR, file), "utf-8");
+      // Strip inner BEGIN/COMMIT (migrate.js wraps with outer transaction)
+      sql = sql.replace(/^\s*BEGIN\s*;?\s*$/gmi, "");
+      sql = sql.replace(/^\s*COMMIT\s*;?\s*$/gmi, "");
+      // Strip inner schema_migrations INSERT (migrate.js handles this)
+      sql = sql.replace(/INSERT\s+INTO\s+agent_memory\.schema_migrations[\s\S]*?ON\s+CONFLICT[\s\S]*?;\s*/gi, "");
 
       await client.query("BEGIN");
       try {
