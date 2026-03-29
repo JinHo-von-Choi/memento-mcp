@@ -52,6 +52,21 @@ importance < 0.3이면 경고 반환 + TTL short 자동 설정.
 - 새 서비스 경로/포트/설정값을 확인했을 때 (type=fact, importance=0.5)
 - 배포/빌드 절차가 완성됐을 때 (type=procedure, importance=0.7)
 
+### batch_remember
+
+여러 파편을 한번에 저장한다. 단일 트랜잭션으로 최대 200건을 일괄 INSERT하여 HTTP 라운드트립을 최소화한다. 개별 파편은 품질 게이트(validateContent)를 거치며, 부적합 파편은 건너뛴다.
+
+파라미터:
+
+| 이름 | 타입 | 필수 | 설명 |
+|------|------|------|------|
+| fragments | array | O | 저장할 파편 배열 (최대 200건). 각 항목: content(string, 필수), topic(string, 필수), type(string, 필수), importance(number), keywords(string[]). |
+| agentId | string | - | 에이전트 ID (RLS 격리용) |
+
+반환: `{ success, inserted, skipped }`
+
+주의: batch_remember는 단순 배열 저장용으로, remember의 모든 파라미터를 지원하지 않는다. 미지원: contextSummary, isAnchor, supersedes, linkedTo, scope, sessionId. episode type도 미지원. 이 속성들이 필요하면 개별 remember를 호출한다.
+
 ### recall
 
 파편을 검색한다. 키워드, 시맨틱, 하이브리드 3가지 검색 경로를 자동 선택.

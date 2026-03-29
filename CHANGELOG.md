@@ -2,11 +2,11 @@
 
 ## [2.0.1] - 2026-03-29
 
-### Changed
-- README.md: 1,486줄 → 166줄 입문 가이드로 재작성
-- README.en.md: 한국어 README와 1:1 구조 동기화 재작성
-
 ### Added
+- Episodic memory: episode type (1000자, 서사/맥락 기억), context_summary 선택 필드
+- Episodic memory: session_id 기반 시간 인접 번들링 (includeContext=true)
+- Episodic memory: reflect narrative_summary → episode 파편 자동 생성
+- migration-017-episodic.sql: type CHECK 확장, context_summary/session_id 컬럼
 - docs/architecture.md: 시스템 구조, DB 스키마, 3계층 검색, TTL 계층
 - docs/configuration.md: 환경 변수, MEMORY_CONFIG, 임베딩 Provider, 테스트
 - docs/api-reference.md: HTTP 엔드포인트, 프롬프트, 리소스, 사용 흐름
@@ -16,6 +16,21 @@
 - README/README.en: 벤치마크 성능 요약 섹션 (recall@5 88.3%, QA 45.4%)
 - docs/*.en.md: 영문 분리 문서 6개 (architecture, configuration, api-reference, internals, cli, benchmark)
 - docs/benchmark.md: 벤치마크 리포트 한국어 번역
+- README: Memory vs Rules 섹션 추가
+
+### Changed
+- README.md: 1,486줄 → 166줄 입문 가이드로 재작성
+- README.en.md: 한국어 README와 1:1 구조 동기화 재작성
+- MCP serverInfo version 1.7.0 → 2.0.1, instructions에 episode type/includeContext 설명 추가
+- Token budget: chars/4 추정 → js-tiktoken 정밀 계산으로 개선
+- quickstart.md: memory-schema.sql → npm run migrate로 설치 안내 교체
+
+### Fixed
+- uuid[] → text[] 캐스팅 수정 (LinkedFragmentLoader, FragmentWriter)
+- agent_id='default' 공유 파편이 다른 에이전트 SELECT에서 누락되던 문제 (OR 조건 추가)
+- L1 Redis 검색에서 agentId 미지원 제한사항 문서화
+- MemoryEvaluator 유형 제외 로직 명시, 프로덕션 인증 미설정 시 경고 로그 추가
+- README 벤치마크 recall-QA gap 명시 및 알려진 제한사항 섹션 추가
 
 ### Changed (i18n)
 - README.en.md: 영문 docs(.en.md)로 링크 변경
