@@ -7,6 +7,18 @@
 import fs   from "node:fs";
 import path from "node:path";
 import pg   from "pg";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+if (!process.env.DATABASE_URL) {
+  const h  = process.env.POSTGRES_HOST     || "localhost";
+  const p  = process.env.POSTGRES_PORT     || "5432";
+  const d  = process.env.POSTGRES_DB       || "memento";
+  const u  = process.env.POSTGRES_USER     || "postgres";
+  const pw = process.env.POSTGRES_PASSWORD || "";
+  process.env.DATABASE_URL = `postgresql://${u}:${encodeURIComponent(pw)}@${h}:${p}/${d}`;
+}
 
 const DB_URL        = process.env.DATABASE_URL;
 const MIGRATION_DIR = path.join(import.meta.dirname, "../lib/memory");
@@ -31,6 +43,27 @@ async function migrate() {
         applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+
+    // pgvector 스키마 자동 감지
+    let pgvectorSchema = process.env.PGVECTOR_SCHEMA || "";
+    if (!pgvectorSchema) {
+      try {
+        const extResult = await client.query(
+          `SELECT n.nspname FROM pg_extension e
+           JOIN pg_namespace n ON e.extnamespace = n.oid
+           WHERE e.extname = 'vector'`
+        );
+        if (extResult.rows.length > 0 && extResult.rows[0].nspname !== "public") {
+          pgvectorSchema = extResult.rows[0].nspname;
+        }
+      } catch { /* pgvector not installed */ }
+    }
+
+    const searchPathParts = ["agent_memory"];
+    if (pgvectorSchema) searchPathParts.push(pgvectorSchema);
+    searchPathParts.push("public");
+    const searchPathSQL = `SET search_path TO ${searchPathParts.join(", ")}`;
+    console.log(`search_path: ${searchPathParts.join(", ")}${pgvectorSchema ? ` (pgvector in ${pgvectorSchema})` : ""}`);
 
     const { rows } = await client.query(
       "SELECT filename FROM agent_memory.schema_migrations ORDER BY filename"
@@ -60,6 +93,7 @@ async function migrate() {
       sql = sql.replace(/INSERT\s+INTO\s+agent_memory\.schema_migrations[\s\S]*?ON\s+CONFLICT[\s\S]*?;\s*/gi, "");
 
       await client.query("BEGIN");
+      await client.query(searchPathSQL);
       try {
         await client.query(sql);
         await client.query(

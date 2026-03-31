@@ -20,6 +20,6 @@ DROP INDEX IF EXISTS agent_memory.idx_frag_embedding;
 
 CREATE INDEX idx_frag_embedding
   ON agent_memory.fragments
-  USING hnsw (embedding nerdvana.vector_cosine_ops)
+  USING hnsw (embedding vector_cosine_ops)
   WITH (m = 16, ef_construction = 128)
   WHERE (embedding IS NOT NULL);
