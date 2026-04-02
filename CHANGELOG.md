@@ -16,6 +16,10 @@
 - migration-021-oauth-clients.sql, OAuthClientStore.js
 - DEFAULT_DAILY_LIMIT, DEFAULT_PERMISSIONS, DEFAULT_FRAGMENT_LIMIT env vars
 - OAUTH_TRUSTED_ORIGINS env var for origin-based redirect validation
+- **Workspace isolation** (`migration-024`): `fragments.workspace` column partitions memories by project/role/client within the same API key. `api_keys.default_workspace` auto-tags on `remember` and auto-filters on `recall`/`context`. Search filter: `(workspace = $X OR workspace IS NULL)` — NULL fragments remain globally visible.
+- Admin: `PATCH /keys/:id/workspace` endpoint to configure default workspace per key.
+- MCP tools: `workspace` optional parameter added to `remember`, `recall`, `context`, `batch_remember`.
+- DB: migration-024 — `fragments.workspace VARCHAR(255)`, `api_keys.default_workspace VARCHAR(255)`, composite index `(key_id, workspace)` and partial index `(workspace)`.
 
 ### Fixed
 - Session TTL default 60min -> 240min
