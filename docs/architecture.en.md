@@ -49,6 +49,8 @@ server.js  (HTTP server)
             +-- SearchEventRecorder.js    FragmentSearch.search() result to search_events table recording
             +-- EvaluationMetrics.js      tool_feedback-based implicit Precision@5 and downstream task success rate computation
             +-- MorphemeIndex.js          Morpheme-based L3 fallback index
+            +-- TemporalLinker.js         Time-based auto-linking (same topic ±24h, weight=max(0.3, 1-hours/24), max 5 links)
+            +-- Reranker.js               Cross-Encoder reranking (external HTTP if RERANKER_URL set, otherwise ONNX in-process ms-marco-MiniLM-L-6-v2)
             +-- memory-schema.sql         PostgreSQL schema definition
             +-- migration-001-temporal.sql Temporal schema migration (valid_from/to/superseded_by)
             +-- migration-002-decay.sql   Decay idempotency migration (last_decay_at)
@@ -71,6 +73,9 @@ server.js  (HTTP server)
             +-- migration-019-hnsw-tuning.sql       HNSW ef_construction 64→128
             +-- migration-020-search-layer-latency.sql search_events per-layer latency columns
             +-- migration-021-oauth-clients.sql        OAuth client registration table (oauth_clients, client_id/secret/redirect_uris)
+            +-- migration-022-temporal-link-type.sql   fragment_links CHECK constraint adds temporal type
+            +-- migration-023-link-weight-float.sql    fragment_links.weight integer→real (supports TemporalLinker float weights)
+            +-- migration-024-workspace.sql            fragments.workspace + api_keys.default_workspace columns, 2 indexes
 ```
 
 Supporting modules:
@@ -177,6 +182,7 @@ erDiagram
         boolean quality_verified "MemoryEvaluator verdict: NULL=unevaluated, TRUE=keep, FALSE=downgrade/discard"
         text context_summary "Context/background summary of when the memory was created (primarily used in episodes)"
         text session_id "Session ID in which the fragment was created"
+        text workspace "Workspace isolation (NULL=global)"
     }
     fragment_links {
         bigserial id PK
@@ -234,8 +240,9 @@ The store for all fragments. This is the core table of the system.
 | quality_verified | BOOLEAN | DEFAULT NULL | MemoryEvaluator quality verdict. NULL=unevaluated, TRUE=keep (verified), FALSE=downgrade/discard (rejected). Used in permanent promotion Circuit Breaker |
 | context_summary | TEXT | | Context/background summary of when the memory was created (primarily used in episodes) |
 | session_id | TEXT | | Session ID in which the fragment was created |
+| workspace | TEXT | | Workspace isolation label. NULL means global fragment (visible in all workspace searches). When set, only this workspace + global (NULL) fragments are returned |
 
-Index list: content_hash (UNIQUE), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE).
+Index list: content_hash (UNIQUE), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
 
 The HNSW vector index is created as a conditional index on `embedding IS NOT NULL`. Parameters: m=16 (neighbor connections), ef_construction=128 (index build search depth), distance function vector_cosine_ops. ef_search=80 (applied via session-level SET LOCAL).
 
@@ -323,6 +330,23 @@ The `key_id` column provides an additional isolation layer at the API key level.
 This isolation model implements per-key memory partitioning in multi-agent environments. API keys are managed through the Admin SPA (`/v1/internal/model/nothing`). On creation, the raw key (`mmcp_<slug>_<32 hex>`) is returned in the response exactly once; only the SHA-256 hash is stored in the database.
 
 The Admin UI (`/v1/internal/model/nothing`) requires master key authentication. Authenticate via the Authorization Bearer header. A successful POST /auth issues an HttpOnly session cookie that is automatically attached to subsequent requests.
+
+### Workspace-Based Memory Isolation
+
+The `fragments.workspace` column provides an additional isolation layer within the same API key — scoped to project, role, or client.
+
+**NULL = global fragment**: Fragments with `workspace IS NULL` appear in all workspace searches, ensuring backward compatibility with existing fragments.
+
+**Search filter**: When workspace is specified, the condition `(workspace = $X OR workspace IS NULL)` is applied. Both workspace-specific and global fragments are returned.
+
+**Priority**: Explicit `workspace` parameter in MCP tool call > key's `default_workspace` > NULL (global).
+
+**Configuration**: Set `default_workspace` in the Admin SPA key editor, or use `PATCH /v1/internal/model/nothing/keys/:id/workspace`.
+
+**Use cases**:
+- Developer switching between projects in the same session (`workspace: "memento-mcp"`, `workspace: "docs-mcp"`)
+- Agent separating work and personal memories (`workspace: "work"`, `workspace: "personal"`)
+- Freelancer isolating client memories (`workspace: "client-acme"`, `workspace: "client-xyz"`)
 
 ### OAuth 2.0 Authentication Flow
 
