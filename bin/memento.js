@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "dotenv/config";
 import { parseArgs } from '../lib/cli/parseArgs.js';
 
 const COMMANDS = {
