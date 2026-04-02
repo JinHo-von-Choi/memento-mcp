@@ -134,6 +134,7 @@ See [integration guides](docs/getting-started/) for platform-specific setup.
 | Auto-cleanup | Duplicate merging, contradiction detection, importance decay, TTL-based forgetting |
 | Admin Console | Memory explorer, knowledge graph, statistics dashboard, API key group/status filters, inline daily-limit editing |
 | OAuth Integration | RFC 7591 Dynamic Client Registration, Claude.ai Web and ChatGPT integration support |
+| **Workspace isolation** | Partition memories by project, role, or client within the same API key. Auto-tag via `api_keys.default_workspace`, auto-filter on recall. |
 
 See [SKILL.md](SKILL.md) for the full list of MCP tools.
 
