@@ -20,8 +20,14 @@ const l3Results = [
 ];
 
 describe("mergeRRF", () => {
+  const layers = [
+    { name: "l1", results: l1Ids,     weightFactor: 2.0 },
+    { name: "l2", results: l2Results, weightFactor: 1.0 },
+    { name: "l3", results: l3Results, weightFactor: 1.0 },
+  ];
+
   test("L1, L2, L3 결과가 모두 병합되어야 한다", () => {
-    const merged = mergeRRF(l1Ids, l2Results, l3Results);
+    const merged = mergeRRF(layers);
     const ids    = merged.map(f => f.id);
     assert.ok(ids.includes("a"));
     assert.ok(ids.includes("b"));
@@ -29,17 +35,21 @@ describe("mergeRRF", () => {
   });
 
   test("L1에 있는 파편(b)이 가장 높은 점수여야 한다", () => {
-    const merged = mergeRRF(l1Ids, l2Results, l3Results);
+    const merged = mergeRRF(layers);
     assert.strictEqual(merged[0].id, "b");
   });
 
   test("중복 파편이 없어야 한다", () => {
-    const merged = mergeRRF(l1Ids, l2Results, l3Results);
+    const merged = mergeRRF(layers);
     const ids    = merged.map(f => f.id);
     assert.strictEqual(ids.length, new Set(ids).size);
   });
 
   test("빈 L1으로도 동작해야 한다", () => {
-    assert.doesNotThrow(() => mergeRRF([], l2Results, l3Results));
+    assert.doesNotThrow(() => mergeRRF([
+      { name: "l1", results: [],         weightFactor: 2.0 },
+      { name: "l2", results: l2Results,  weightFactor: 1.0 },
+      { name: "l3", results: l3Results,  weightFactor: 1.0 },
+    ]));
   });
 });

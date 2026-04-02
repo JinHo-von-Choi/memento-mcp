@@ -6,14 +6,14 @@
  *
  * Task 4-1: confidence 계산, age_days 계산
  * Task 4-2: linked 배열 구조
- * Task 4-4: mergeRRFWithGraph 동작 검증
+ * Task 4-4: mergeRRF 범용 레이어 배열 동작 검증
  */
 
 import { test, describe } from "node:test";
 import assert             from "node:assert/strict";
 
 import { computeConfidence, getUtilityBaseline } from "../../lib/memory/UtilityBaseline.js";
-import { mergeRRFWithGraph }                     from "../../lib/memory/FragmentSearch.js";
+import { mergeRRF }                               from "../../lib/memory/FragmentSearch.js";
 
 /** ─── Task 4-1 / 4-3: confidence 계산 ─── */
 
@@ -87,9 +87,9 @@ describe("linked 배열 구조", () => {
   });
 });
 
-/** ─── Task 4-4: mergeRRFWithGraph ─── */
+/** ─── Task 4-4: mergeRRF 범용 레이어 배열 ─── */
 
-describe("mergeRRFWithGraph", () => {
+describe("mergeRRF (layers interface)", () => {
   const l1Ids       = ["b"];
   const l2Results   = [
     { id: "a", content: "foo", importance: 0.8 },
@@ -104,8 +104,15 @@ describe("mergeRRFWithGraph", () => {
     { id: "c", content: "baz", similarity: 0.7 }
   ];
 
+  const layers = [
+    { name: "l1",    results: l1Ids,        weightFactor: 2.0 },
+    { name: "l2",    results: l2Results,    weightFactor: 1.0 },
+    { name: "graph", results: graphResults, weightFactor: 1.5 },
+    { name: "l3",    results: l3Results,    weightFactor: 1.0 },
+  ];
+
   test("L1, L2, L2.5 Graph, L3 결과가 모두 병합되어야 한다", () => {
-    const merged = mergeRRFWithGraph(l1Ids, l2Results, graphResults, l3Results);
+    const merged = mergeRRF(layers);
     const ids    = merged.map(f => f.id);
     assert.ok(ids.includes("a"),  "L2 결과 a 포함");
     assert.ok(ids.includes("b"),  "L1+L2+L3 결과 b 포함");
@@ -115,13 +122,16 @@ describe("mergeRRFWithGraph", () => {
   });
 
   test("L1에 있는 파편(b)이 가장 높은 점수여야 한다", () => {
-    const merged = mergeRRFWithGraph(l1Ids, l2Results, graphResults, l3Results);
+    const merged = mergeRRF(layers);
     assert.strictEqual(merged[0].id, "b");
   });
 
   test("그래프 이웃은 L3보다 높은 RRF 점수를 받아야 한다 (가중치 1.5x vs 1.0x)", () => {
     /** g1(graph rank 0, weight 1.5)과 c(L3 rank 1, weight 1.0) 비교 */
-    const merged   = mergeRRFWithGraph([], [], graphResults, l3Results);
+    const merged   = mergeRRF([
+      { name: "graph", results: graphResults, weightFactor: 1.5 },
+      { name: "l3",    results: l3Results,    weightFactor: 1.0 },
+    ]);
     const g1Entry  = merged.find(f => f.id === "g1");
     const cEntry   = merged.find(f => f.id === "c");
     assert.ok(g1Entry._rrfScore > cEntry._rrfScore,
@@ -129,18 +139,28 @@ describe("mergeRRFWithGraph", () => {
   });
 
   test("중복 파편이 없어야 한다", () => {
-    const merged = mergeRRFWithGraph(l1Ids, l2Results, graphResults, l3Results);
+    const merged = mergeRRF(layers);
     const ids    = merged.map(f => f.id);
     assert.strictEqual(ids.length, new Set(ids).size);
   });
 
   test("빈 그래프 결과로도 동작해야 한다", () => {
-    const merged = mergeRRFWithGraph(l1Ids, l2Results, [], l3Results);
+    const merged = mergeRRF([
+      { name: "l1",    results: l1Ids,     weightFactor: 2.0 },
+      { name: "l2",    results: l2Results, weightFactor: 1.0 },
+      { name: "graph", results: [],        weightFactor: 1.5 },
+      { name: "l3",    results: l3Results, weightFactor: 1.0 },
+    ]);
     assert.ok(merged.length > 0);
   });
 
   test("모두 빈 입력이면 빈 배열 반환", () => {
-    const merged = mergeRRFWithGraph([], [], [], []);
+    const merged = mergeRRF([
+      { name: "l1",    results: [], weightFactor: 2.0 },
+      { name: "l2",    results: [], weightFactor: 1.0 },
+      { name: "graph", results: [], weightFactor: 1.5 },
+      { name: "l3",    results: [], weightFactor: 1.0 },
+    ]);
     assert.strictEqual(merged.length, 0);
   });
 });
