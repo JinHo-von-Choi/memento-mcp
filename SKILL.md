@@ -237,7 +237,7 @@ remember(
 - keywords에 플랫폼명 포함: `["memento-mcp", "claude-code", "nerdvana"]`
 - recall 시 플랫폼 필터: `recall(keywords=["claude-code"])`
 
-## 도구 레퍼런스 (14개)
+## 도구 레퍼런스 (16개)
 
 ### remember
 
@@ -261,6 +261,12 @@ remember(
 | sessionId | string | - | 현재 세션 ID |
 | agentId | string | - | 에이전트 ID (RLS 격리용) |
 | workspace | string | - | 워크스페이스 이름. 미지정 시 키의 default_workspace 자동 적용. |
+| caseId | string | - | 이 파편이 속한 케이스 ID. 미지정 시 session_id 사용 |
+| goal | string | - | 에피소드 목표 (episode 타입 권장) |
+| outcome | string | - | 에피소드 결과 |
+| phase | string | - | 작업 단계 (예: planning, debugging, verification) |
+| resolutionStatus | string | - | open / resolved / abandoned |
+| assertionStatus | string | observed | observed / inferred / verified / rejected |
 
 품질 게이트: content < 10자, URL만, type+topic null인 경우 거부. importance < 0.3이면 경고 + TTL short 자동 설정.
 
@@ -414,6 +420,57 @@ summary 또는 sessionId 중 하나 이상 필수.
 | section | string | - | overview, lifecycle, keywords, search, episode, multiplatform, tools, importance |
 
 미지정 시 전체 가이드(~12KB) 반환.
+
+### reconstruct_history
+
+**목적**: case_id 또는 entity 기반으로 작업 히스토리를 시간순 재구성한다. 인과 체인, 미해결 브랜치, case_events DAG를 함께 반환하여 복잡한 디버깅 세션의 전체 맥락을 파악할 수 있다.
+
+**언제 사용**: 특정 케이스/이슈의 전체 흐름 파악, 인과 관계 분석, 미해결 문제 확인.
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| caseId | string | - | 재구성할 케이스 ID (caseId 또는 entity 중 하나 필수) |
+| entity | string | - | topic/keywords ILIKE 필터 (caseId 없을 때 사용) |
+| timeRange | object | - | { from: ISO8601, to: ISO8601 } 시간 범위 |
+| query | string | - | content 키워드 추가 필터 |
+| limit | number | 100 | 최대 반환 파편 수 (최대 500) |
+
+반환값:
+- `ordered_timeline`: 시간순 파편 배열
+- `causal_chains`: BFS 인과 체인 배열 `{ root_id, chain[], length, is_resolved }`
+- `unresolved_branches`: 미해결 파편 + error_observed 이벤트 배열
+- `supporting_fragments`: 체인에 포함되지 않은 나머지 파편
+- `case_events`: case_events 테이블 이벤트 배열 (caseId 지정 시)
+- `event_dag`: case_event_edges 배열
+- `summary`: 요약 문자열
+
+**예시**:
+```json
+{ "caseId": "debug-auth-2026-04-01" }
+```
+
+### search_traces
+
+**목적**: fragments 테이블을 grep하듯 선택적으로 탐색한다. reconstruct_history보다 경량하며, 특정 조건에 맞는 파편을 빠르게 조회할 때 사용한다.
+
+**언제 사용**: 키워드 검색, 특정 세션/케이스의 파편 확인, 이벤트 타입별 필터링.
+
+| 파라미터 | 타입 | 기본값 | 설명 |
+|---|---|---|---|
+| event_type | string | - | fragment type 필터 (fact, decision, error, procedure 등) |
+| entity_key | string | - | topic ILIKE 필터 |
+| keyword | string | - | content ILIKE 필터 |
+| case_id | string | - | 특정 케이스 필터 |
+| session_id | string | - | 특정 세션 필터 |
+| time_range | object | - | { from: ISO8601, to: ISO8601 } |
+| limit | number | 20 | 최대 반환 수 (최대 100) |
+
+반환값: `{ success, traces[], count }`
+
+**예시**:
+```json
+{ "keyword": "authentication", "event_type": "error", "limit": 10 }
+```
 
 ## 중요도 기본값
 
