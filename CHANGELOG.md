@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.5.0] - 2026-04-03
+
+### Fixed (보안 / 정확성)
+- `FragmentReader.getById/getByIds/searchBySource`: `valid_to IS NULL` 필터 누락 — superseded 파편이 조회에 노출되는 버그 수정
+- `FragmentIndex.warmup()`: `valid_to IS NULL` 조건 추가, 만료 파편이 L1 캐시를 오염시키는 버그 수정
+- `handleMcpDelete()`: session 삭제 시 소유자 검증 누락 수정 — 미인증 401, 타 키 삭제 시도 403 반환, master key bypass
+- `GraphNeighborSearch`: keyId 타입 정규화 (`Array.isArray` guard), `key_id = ANY($4::int[])` 타입 안전성 수정
+- `TemporalLinker`: `keyId = ANY($n)` → `keyId = $n` 단일 정수 등치로 수정
+- `CaseEventStore.append()`: `sequence_no` 할당에 `FOR UPDATE` 잠금 추가, 동시 INSERT 경쟁 조건 방지
+- `MemoryManager.toolFeedback()`: `keyId` 격리 추가, EMA 업데이트가 cross-key로 적용되는 버그 수정
+- `MemoryManager.amend()`: `groupKeyIds` 소유권 검증 추가
+
+### Fixed (데이터 정합성)
+- `MemoryManager.batchRemember()`: INSERT SQL 8개 컬럼 누락 수정 (`context_summary`, `session_id`, `case_id`, `goal`, `outcome`, `phase`, `resolution_status`, `assertion_status`)
+- `MemoryManager.batchRemember()` TOCTOU: quota 체크 트랜잭션과 INSERT 트랜잭션 분리로 인한 경쟁 조건 완화 — INSERT 트랜잭션 내 `FOR UPDATE` 재잠금 + 잔여 슬롯 재확인
+
+### Fixed (성능 / N+1)
+- `FragmentSearch._tryHotCache`: `for await` → `Promise.all`, Redis 직렬 호출 병렬화
+- `FragmentSearch._cacheFragments`: `for await` → `Promise.all`
+- `FragmentIndex.warmup()`: 순차 indexing → 50개 chunk `Promise.all` 병렬화
+- `MemoryManager.reflect()`: `Promise.allSettled` 병렬 insert 도입
+- `MemoryManager.context()`: `for await` → `Promise.all`
+- `MemoryManager.forget(topic)`: Redis deindex `Promise.all` + 단일 `deleteMany()` 일괄 삭제
+- `tool_recall includeContext`: O(N·K) 순차 `searchBySource` → 세션 ID dedup + `Promise.all` + Map 조회 O(K)
+
+### Fixed (세션)
+- `sessions.js validateStreamableSession()`: Redis 복원 시 TTL 갱신 및 `lastAccessedAt`/`expiresAt` 재설정 누락 수정 — 서버 재시작 후 복원된 세션이 즉시 만료되는 버그 수정
+
+### Added
+- `FragmentWriter.deleteMany(ids, agentId, keyId)`: fragment_links, linked_to 정리 후 일괄 삭제
+- `FragmentStore.deleteMany()`: FragmentWriter.deleteMany 위임
+
 ## [2.4.0] - 2026-04-03
 
 ### Added
