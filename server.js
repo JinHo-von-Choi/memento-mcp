@@ -14,6 +14,8 @@ import http from "http";
 
 /** 설정 */
 import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA } from "./lib/config.js";
+import { MEMORY_CONFIG }          from "./config/memory.js";
+import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
 /** Rate Limiting */
 import { DualRateLimiter } from "./lib/rate-limiter.js";
@@ -132,12 +134,12 @@ const server = http.createServer(async (req, res) => {
   }
 
   /* OAuth 2.0 */
-  if (req.method === "GET" && (url.pathname === "/.well-known/oauth-authorization-server" || url.pathname === "/.well-known/oauth-authorization-server/oauth")) {
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname.startsWith("/.well-known/oauth-authorization-server")) {
     await handleOAuthServerMetadata(req, res);
     return;
   }
 
-  if (req.method === "GET" && url.pathname === "/.well-known/oauth-protected-resource") {
+  if ((req.method === "GET" || req.method === "HEAD") && url.pathname.startsWith("/.well-known/oauth-protected-resource")) {
     await handleOAuthResourceMetadata(req, res);
     return;
   }
@@ -199,6 +201,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
+  validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
   console.log("Streamable HTTP endpoints: POST/GET/DELETE /mcp");
   console.log("Legacy SSE endpoints: GET /sse, POST /message");

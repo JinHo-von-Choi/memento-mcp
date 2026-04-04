@@ -289,7 +289,7 @@ describe("OAuth metadata scheme detection", () => {
   it("getAuthServerMetadata에 https baseUrl 전달 시 모든 엔드포인트가 https", () => {
     const meta = getAuthServerMetadata("https://pmcp.nerdvana.kr");
 
-    assert.strictEqual(meta.issuer, "https://pmcp.nerdvana.kr/oauth");
+    assert.strictEqual(meta.issuer, "https://pmcp.nerdvana.kr");
     assert.strictEqual(meta.authorization_endpoint, "https://pmcp.nerdvana.kr/authorize");
     assert.strictEqual(meta.token_endpoint, "https://pmcp.nerdvana.kr/token");
     assert.strictEqual(meta.service_documentation, "https://pmcp.nerdvana.kr/docs");
@@ -298,7 +298,7 @@ describe("OAuth metadata scheme detection", () => {
   it("getAuthServerMetadata에 http baseUrl 전달 시 모든 엔드포인트가 http", () => {
     const meta = getAuthServerMetadata("http://localhost:57332");
 
-    assert.strictEqual(meta.issuer, "http://localhost:57332/oauth");
+    assert.strictEqual(meta.issuer, "http://localhost:57332");
     assert.strictEqual(meta.authorization_endpoint, "http://localhost:57332/authorize");
     assert.strictEqual(meta.token_endpoint, "http://localhost:57332/token");
   });
