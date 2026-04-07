@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.6.0] - 2026-04-07
+
+### Added
+- **CBR (Case-Based Reasoning)**: `recall(caseMode=true)` — 유사 파편에서 case_id를 추출하여 (goal, events, outcome, resolution_status) 트리플로 반환. 과거 해결 사례 재활용. CaseRecall 모듈 신규 (`lib/memory/CaseRecall.js`)
+  - 가드레일: HARD_MAX_CASES=10, MAX_EVENTS_PER_CASE=20, MAX_EVENT_SUMMARY_LEN=120 (~24KB 상한)
+  - `maxCases` 파라미터 (기본 5, 상한 10)
+- **depth 필터**: `recall(depth="high-level"|"detail"|"tool-level")` — Planner/Executor 역할별 검색 깊이 제어
+  - high-level: decision/episode만 반환 (고수준 계획 참조)
+  - tool-level: procedure/error/fact만 반환 (구체적 실행 절차)
+- `get_skill_guide(section="cbr")`: SKILL.md CBR 섹션 매핑 추가
+
+### Documentation
+- SKILL.md: v2.5.7 현행화 — CBR 활용 가이드, depth 전략, recall 파라미터 3개, 트리거 3개 추가
+- aiInstructions: caseMode/depth/maxCases 사용 예시 추가
+- api-reference.md: recall 도구 섹션 + caseMode 응답 JSON 예시
+- architecture.md: CBR/Reconsolidation/SpreadingActivation/Security/ESM/Graph 6개 섹션 추가
+- README.md: v2.5.7 기능 목록 갱신
+
 ## [2.5.7] - 2026-04-07
 
 ### Security
