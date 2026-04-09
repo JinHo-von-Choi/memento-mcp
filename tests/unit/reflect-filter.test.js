@@ -12,6 +12,7 @@ import assert             from "node:assert/strict";
 
 import {
   _isEmptySession,
+  _shouldSkipReflect,
   MIN_SESSION_DURATION_MS
 } from "../../lib/memory/AutoReflect.js";
 
@@ -113,5 +114,70 @@ describe("_isEmptySession", () => {
 
   test("MIN_SESSION_DURATION_MS 상수가 30초", () => {
     assert.strictEqual(MIN_SESSION_DURATION_MS, 30_000);
+  });
+});
+
+/* ------------------------------------------------------------------ */
+/*  _shouldSkipReflect 단위 테스트                                        */
+/* ------------------------------------------------------------------ */
+
+describe("_shouldSkipReflect", () => {
+
+  test("activity가 null이면 skip true", () => {
+    assert.strictEqual(_shouldSkipReflect(null), true);
+  });
+
+  test("activity가 undefined이면 skip true", () => {
+    assert.strictEqual(_shouldSkipReflect(undefined), true);
+  });
+
+  test("빈 세션(toolCalls 0)이면 skip true", () => {
+    const activity = {
+      toolCalls:    {},
+      startedAt:    "2026-04-09T10:00:00Z",
+      lastActivity: "2026-04-09T10:10:00Z",
+      fragments:    []
+    };
+    assert.strictEqual(_shouldSkipReflect(activity), true);
+  });
+
+  test("명시적 파편이 1개 이상이면 skip true (사용자가 이미 remember를 호출한 세션)", () => {
+    const activity = {
+      toolCalls:    { remember: 3, recall: 2 },
+      startedAt:    "2026-04-09T10:00:00Z",
+      lastActivity: "2026-04-09T10:10:00Z",
+      fragments:    ["frag-abc123"]
+    };
+    assert.strictEqual(_shouldSkipReflect(activity), true);
+  });
+
+  test("명시적 파편이 여러 개면 skip true", () => {
+    const activity = {
+      toolCalls:    { remember: 5 },
+      startedAt:    "2026-04-09T10:00:00Z",
+      lastActivity: "2026-04-09T10:30:00Z",
+      fragments:    ["frag-1", "frag-2", "frag-3"]
+    };
+    assert.strictEqual(_shouldSkipReflect(activity), true);
+  });
+
+  test("도구 호출은 있고 파편 0개이고 duration 충분한 세션만 skip false (유일한 비-skip 케이스)", () => {
+    const activity = {
+      toolCalls:    { context: 3, recall: 2 },
+      startedAt:    "2026-04-09T10:00:00Z",
+      lastActivity: "2026-04-09T10:05:00Z",
+      fragments:    []
+    };
+    assert.strictEqual(_shouldSkipReflect(activity), false);
+  });
+
+  test("duration < 30초면 파편이 0개여도 skip true", () => {
+    const activity = {
+      toolCalls:    { recall: 3 },
+      startedAt:    "2026-04-09T10:00:00Z",
+      lastActivity: "2026-04-09T10:00:15Z",
+      fragments:    []
+    };
+    assert.strictEqual(_shouldSkipReflect(activity), true);
   });
 });
