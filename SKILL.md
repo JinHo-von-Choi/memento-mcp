@@ -2,6 +2,36 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
+## v2.7.0 Breaking Changes
+
+v2.7.0은 보안 강화를 위한 호환성 비보장 변경을 포함한다. 기존 배포 환경에서 업그레이드 시 반드시 아래 항목을 확인하고 환경변수를 갱신해야 한다.
+
+### 인증 (Auth)
+
+- `MEMENTO_ACCESS_KEY` 필수화: 미설정 시 서버 기동이 거부된다. 개발/테스트 환경에서 인증을 비활성화하려면 `MEMENTO_AUTH_DISABLED=true`를 명시적으로 설정한다.
+- `ALLOWED_ORIGINS` 미설정 시 same-origin 요청만 허용된다. 크로스 오리진 접근이 필요하다면 허용할 오리진을 명시적으로 열거해야 한다.
+
+### OAuth
+
+- Silent consent 폐기: 모든 `/oauth/authorize` 요청은 사용자 동의 화면(consent screen)을 반드시 경유한다. 자동 승인(auto-approve) 로직에 의존하는 클라이언트는 consent 화면 처리를 추가해야 한다.
+
+### RBAC
+
+- Default-deny 정책 적용: 도구 맵에 등록되지 않은 도구를 호출하면 `"Access denied: tool not permitted"` 오류가 반환된다. 커스텀 도구를 사용하는 경우 `RBAC_TOOL_MAP`에 명시적으로 등록해야 한다.
+
+### 환경변수 추가/변경
+
+| 변수명 | 타입 | 기본값 | 설명 |
+|--------|------|--------|------|
+| `MEMENTO_ACCESS_KEY` | string | (없음, **필수**) | 마스터 API 키. 미설정 시 기동 거부. |
+| `MEMENTO_AUTH_DISABLED` | boolean | `false` | `true` 설정 시 인증을 비활성화한다. 개발 전용. |
+| `ALLOWED_ORIGINS` | string | (없음) | CORS 허용 오리진 목록 (쉼표 구분). 미설정 시 same-origin만 허용. |
+| `ENABLE_OPENAPI` | boolean | `false` | `true` 설정 시 `/openapi.json` 엔드포인트 활성화. |
+| `OAUTH_ACCESS_TTL_SECONDS` | number | `3600` | OAuth access token 유효 시간 (초). |
+| `OAUTH_REFRESH_TTL_SECONDS` | number | `604800` | OAuth refresh token 유효 시간 (초). |
+
+---
+
 ## 서버 개요
 
 Memento MCP는 MCP(Model Context Protocol) 기반의 장기 기억 서버다. AI 에이전트의 세션 간 지식을 파편(Fragment) 단위로 영속화하고, 3계층 검색(키워드 L1 -> 시맨틱 L2 -> 하이브리드 RRF L3)으로 맥락에 맞는 기억을 회상한다.
@@ -361,6 +391,8 @@ curl 응답 검증 체크:
 
 ## 도구 레퍼런스 (16개)
 
+v2.7.0 RBAC default-deny: 도구 맵에 등록되지 않은 도구를 호출하면 `"Access denied: tool not permitted"` 오류가 반환된다. 서버 관리자가 허용 도구 목록(`RBAC_TOOL_MAP`)을 명시적으로 관리한다.
+
 ### remember
 
 새 파편을 생성한다. 반드시 1~2문장 단위의 원자적 사실 하나만 저장한다.
@@ -407,6 +439,8 @@ curl 응답 검증 체크:
 
 파편 검색. 키워드/시맨틱/하이브리드 자동 선택.
 
+v2.7.0: 반환 파편에 `key_id` 필드가 포함된다. 멀티테넌트 환경에서 파편 소유 키를 확인하는 데 활용할 수 있다.
+
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | keywords | string[] | - | 키워드 검색 (L1->L2) |
@@ -446,6 +480,8 @@ curl 응답 검증 체크:
 | force | boolean | - | permanent 파편 강제 삭제. 기본 false. |
 | agentId | string | - | 에이전트 ID |
 
+v2.7.0: 타 테넌트(다른 API 키) 소유 파편을 삭제 시도하면 `"Fragment not found or no permission"` 오류가 반환된다. master key는 전체 파편에 접근 가능하다.
+
 ### link
 
 | 이름 | 타입 | 필수 | 설명 |
@@ -456,9 +492,13 @@ curl 응답 검증 체크:
 | weight | number | - | 관계 가중치 (0-1, 기본 1) |
 | agentId | string | - | 에이전트 ID |
 
+v2.7.0: fromId 또는 toId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
+
 ### amend
 
 기존 파편 수정. 변경 필드만 전달.
+
+v2.7.0: 타 테넌트 소유 파편 수정 시도 시 `"Fragment not found or no permission"` 오류가 반환된다.
 
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
@@ -539,6 +579,8 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 | startId | string | O | 시작 파편 ID (error 권장) |
 | agentId | string | - | 에이전트 ID |
 
+v2.7.0: startId가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
+
 ### fragment_history
 
 파편 변경 이력. amend 이전 버전 + superseded_by 체인.
@@ -546,6 +588,8 @@ fragment_ids를 지정하고 ENABLE_RECONSOLIDATION=true인 경우: relevant=fal
 | 이름 | 타입 | 필수 | 설명 |
 |------|------|------|------|
 | id | string | O | 조회할 파편 ID |
+
+v2.7.0: id가 타 테넌트 소유 파편인 경우 `"Fragment not found or no permission"` 오류가 반환된다.
 
 ### get_skill_guide
 
