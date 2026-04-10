@@ -30,8 +30,10 @@ describe("RBAC permission check", () => {
     assert.strictEqual(r.required, "admin");
   });
 
-  it("allows unknown tools by default", () => {
-    assert.ok(checkPermission(["read"], "unknown_tool").allowed);
+  it("denies unknown tools (default-deny)", () => {
+    const r = checkPermission(["read"], "unknown_tool");
+    assert.ok(!r.allowed);
+    assert.strictEqual(r.reason, "unknown_tool");
   });
 
   it("maps all memory tools", () => {
