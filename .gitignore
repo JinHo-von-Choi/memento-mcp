@@ -62,3 +62,6 @@ docs/superpowers/
 
 # gstack (security reports, analytics)
 .gstack/
+
+# Playwright MCP artifacts
+.playwright-mcp/
