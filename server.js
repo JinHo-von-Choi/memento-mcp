@@ -13,7 +13,7 @@
 import http from "http";
 
 /** 설정 */
-import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
+import { PORT, ACCESS_KEY, AUTH_DISABLED, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_PER_IP, RATE_LIMIT_PER_KEY, detectPgvectorSchema, PGVECTOR_SCHEMA, ENABLE_OPENAPI } from "./lib/config.js";
 import { MEMORY_CONFIG }          from "./config/memory.js";
 import { validateMemoryConfig }   from "./config/validate-memory-config.js";
 
@@ -227,6 +227,15 @@ const server = http.createServer(async (req, res) => {
   recordHttpRequest(req.method, url.pathname, 404, duration);
 });
 
+/** 기동 전 ACCESS_KEY 검증 — fail-closed */
+if (!ACCESS_KEY && !AUTH_DISABLED) {
+  console.error("[FATAL] MEMENTO_ACCESS_KEY is not set.");
+  console.error("[FATAL] Authentication is fail-closed by default.");
+  console.error("[FATAL] Set MEMENTO_ACCESS_KEY to a non-empty value to enable authentication.");
+  console.error("[FATAL] To run without authentication (development only), set MEMENTO_AUTH_DISABLED=true.");
+  process.exit(1);
+}
+
 server.listen(PORT, () => {
   validateMemoryConfig(MEMORY_CONFIG);
   console.log(`Memento MCP HTTP server listening on port ${PORT}`);
@@ -235,8 +244,11 @@ server.listen(PORT, () => {
 
   if (ACCESS_KEY) {
     console.log("Authentication: ENABLED");
-  } else {
-    console.log("Authentication: DISABLED (set MEMENTO_ACCESS_KEY to enable)");
+  } else if (AUTH_DISABLED) {
+    console.error("╔══════════════════════════════════════════════════════════════╗");
+    console.error("║  WARNING: Authentication is DISABLED (MEMENTO_AUTH_DISABLED) ║");
+    console.error("║  All requests are treated as master. DO NOT use in production. ║");
+    console.error("╚══════════════════════════════════════════════════════════════╝");
   }
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);
