@@ -38,6 +38,27 @@
 | ENABLE_SPREADING_ACTIVATION | false | Enable SpreadingActivation. When true, the contextText parameter in recall proactively activates related fragments. Recommended to measure latency impact before enabling |
 | ENABLE_PATTERN_ABSTRACTION | false | Enable pattern abstraction. Planned for activation after sufficient data accumulation (not yet implemented) |
 
+#### Symbolic Memory (v2.8.0, opt-in)
+
+All flags default to `false` / noop. With default values, behavior must be identical to v2.7.0. For phased activation, follow the recommended order in the CHANGELOG.md v2.8.0 Migration Guide.
+
+| Variable | Default | Phase | Description |
+|----------|---------|-------|-------------|
+| MEMENTO_SYMBOLIC_ENABLED | false | 0 | Master kill switch for the entire symbolic subsystem |
+| MEMENTO_SYMBOLIC_SHADOW | false | 1 | Shadow mode: symbolic results are recorded but not applied |
+| MEMENTO_SYMBOLIC_CLAIM_EXTRACTION | false | 1 | Enables ClaimExtractor call in RememberPostProcessor |
+| MEMENTO_SYMBOLIC_EXPLAIN | false | 2 | Includes explanation field in recall responses |
+| MEMENTO_SYMBOLIC_LINK_CHECK | false | 3 | Enables LinkIntegrityChecker advisory path |
+| MEMENTO_SYMBOLIC_POLARITY_CONFLICT | false | 3 | Records ClaimConflictDetector advisory warnings |
+| MEMENTO_SYMBOLIC_POLICY_RULES | false | 4 | PolicyRules soft gating (accumulates validation_warnings) |
+| MEMENTO_SYMBOLIC_CBR_FILTER | false | 5 | Applies symbolic filter to CaseRecall |
+| MEMENTO_SYMBOLIC_PROACTIVE_GATE | false | 6 | ProactiveRecall polarity gate |
+| MEMENTO_SYMBOLIC_RULE_VERSION | v1 | - | Rule package version identifier (fragment_claims.rule_version column) |
+| MEMENTO_SYMBOLIC_TIMEOUT_MS | 50 | - | SymbolicOrchestrator single call timeout (ms) |
+| MEMENTO_SYMBOLIC_MAX_CANDIDATES | 32 | - | Candidate count cap for symbolic processing |
+
+The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard gate switching. Defaults to false.
+
 #### OAuth Token TTL
 
 OAuth token TTLs are linked to the session TTL.
