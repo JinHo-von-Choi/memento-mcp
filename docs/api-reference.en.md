@@ -71,7 +71,7 @@ All MCP tool calls must pass RBAC validation.
 
 - Master key (`MEMENTO_ACCESS_KEY`): treated as `permissions=null`, granting access to all tools.
 - API key (`mmcp_xxx`): tool access is restricted based on the `permissions` array specified at key creation time. Requests for tools not included in the array are immediately denied.
-- **default-deny**: tool names not registered in the `TOOL_PERMISSIONS` map are always denied regardless of permissions (`reason: "unknown_tool"`).
+- Tools registered in the `TOOL_PERMISSIONS` map require the corresponding permission level. Unregistered tool names are treated as `required=null` and pass the permission check. To bring a new tool into the RBAC boundary, register it explicitly in the `TOOL_PERMISSIONS` map.
 - Three permission levels exist: `read` (recall/context/memory_stats etc.), `write` (remember/forget/amend etc.), `admin` (memory_consolidate/apply_update etc.). A key with `admin` permission can invoke tools at all levels.
 - When a forget/amend/link request targets a fragment owned by another tenant (different API key), a `"Fragment not found"` error is returned. Isolation is enforced at the SQL level via `key_id` conditions, so the fragment's existence is never exposed.
 

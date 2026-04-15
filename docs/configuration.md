@@ -9,12 +9,12 @@
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | PORT | 57332 | HTTP 리슨 포트 |
-| MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. **v2.7.0 breaking**: 미설정 시 서버가 모든 요청을 거부(fail-closed). 개발 환경에서 인증을 비활성화하려면 `MEMENTO_AUTH_DISABLED=true`를 함께 사용해야 한다 |
+| MEMENTO_ACCESS_KEY | (없음) | Bearer 인증 키. 미설정 시 서버는 "Authentication: DISABLED" 로그를 출력하고 모든 요청을 master 권한으로 처리한다. 명시적 비활성화 선언을 위해 `MEMENTO_AUTH_DISABLED=true`를 병기할 수 있다 |
 | MEMENTO_AUTH_DISABLED | false | `true`로 설정 시 인증을 완전히 비활성화하여 모든 요청을 master 권한으로 처리. 개발/테스트 전용. `MEMENTO_ACCESS_KEY`가 비어 있을 때만 유효 |
 | SESSION_TTL_MINUTES | 43200 | 세션 유효 시간 (분). 기본값 30일. 슬라이딩 윈도우 방식으로 도구 사용 시마다 갱신 |
 | LOG_DIR | ./logs | Winston 로그 파일 저장 디렉토리 |
-| ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 same-origin만 허용 |
-| ADMIN_ALLOWED_ORIGINS | (없음) | Admin 콘솔 허용 Origin 목록. 미설정 시 same-origin만 허용 |
+| ALLOWED_ORIGINS | (없음) | 허용할 Origin 목록. 쉼표로 구분. 미설정 시 모든 Origin 허용 (MCP 클라이언트 호환성 우선) |
+| ADMIN_ALLOWED_ORIGINS | (없음) | Admin 콘솔 허용 Origin 목록. 미설정 시 모든 Origin 허용 |
 | ENABLE_OPENAPI | false | `true`로 설정 시 `GET /openapi.json` 엔드포인트 활성화. 인증 레벨에 따라 다른 스펙 반환 (master key: 전체 경로 포함, API key: 권한 필터된 도구 목록) |
 | RATE_LIMIT_WINDOW_MS | 60000 | Rate limiting 윈도우 크기 (ms) |
 | RATE_LIMIT_MAX_REQUESTS | 120 | 윈도우 내 IP당 최대 요청 수 |

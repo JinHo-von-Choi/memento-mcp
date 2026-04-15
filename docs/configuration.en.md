@@ -9,12 +9,12 @@
 | Variable | Default | Description |
 |----------|---------|-------------|
 | PORT | 57332 | HTTP listen port |
-| MEMENTO_ACCESS_KEY | (none) | Bearer authentication key. **v2.7.0 breaking**: server rejects all requests when unset (fail-closed). To disable authentication in development, set `MEMENTO_AUTH_DISABLED=true` alongside |
+| MEMENTO_ACCESS_KEY | (none) | Bearer authentication key. When unset, the server logs "Authentication: DISABLED" and processes all requests with master privileges. Set `MEMENTO_AUTH_DISABLED=true` alongside for an explicit opt-out declaration |
 | MEMENTO_AUTH_DISABLED | false | When `true`, completely disables authentication and processes all requests with master privileges. Development/testing only. Only effective when `MEMENTO_ACCESS_KEY` is unset |
 | SESSION_TTL_MINUTES | 43200 | Session TTL (minutes). Default 30 days. Sliding window: TTL resets on every tool call |
 | LOG_DIR | ./logs | Winston log file directory |
-| ALLOWED_ORIGINS | (none) | Allowed Origins list. Comma-separated. Only same-origin allowed when unset |
-| ADMIN_ALLOWED_ORIGINS | (none) | Admin console allowed Origins list. Only same-origin allowed when unset |
+| ALLOWED_ORIGINS | (none) | Allowed Origins list. Comma-separated. When unset, all Origins are allowed (MCP client compatibility takes precedence) |
+| ADMIN_ALLOWED_ORIGINS | (none) | Admin console allowed Origins list. When unset, all Origins are allowed |
 | ENABLE_OPENAPI | false | When `true`, enables the `GET /openapi.json` endpoint. Returns different specs based on authentication level (master key: all paths included, API key: permission-filtered tool list) |
 | RATE_LIMIT_WINDOW_MS | 60000 | Rate limiting window size (ms) |
 | RATE_LIMIT_MAX_REQUESTS | 120 | Max requests per IP per window |

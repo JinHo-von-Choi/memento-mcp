@@ -103,7 +103,7 @@ Supporting modules:
 ```
 lib/
 +-- config.js          Environment variables exposed as constants. Includes AUTH_DISABLED (MEMENTO_AUTH_DISABLED), OAUTH_TOKEN_TTL_SECONDS, OAUTH_REFRESH_TTL_SECONDS, ENABLE_OPENAPI, SSE_HEARTBEAT_INTERVAL_MS
-+-- auth.js            Bearer token validation. `resolveAuthConfig(accessKey, authDisabled)` -- pure function for auth config resolution. `buildAuthDecision(accessKey, authDisabled, bearerToken)` -- fail-closed entry and master key direct comparison pure function (excludes OAuth/DB API key verification)
++-- auth.js            Bearer token validation. `validateAuthentication(req, msg)` -- actual entry point. When `MEMENTO_ACCESS_KEY` is unset, all requests pass through with master privileges. `resolveAuthConfig(accessKey, authDisabled)` -- pure function for auth config resolution. `buildAuthDecision(accessKey, authDisabled, bearerToken)` -- pure function for unit testing (excludes OAuth/DB API key verification)
 +-- oauth.js           OAuth 2.0 PKCE authorization/token handling
 +-- sessions.js        Streamable/Legacy SSE session lifecycle
 +-- redis.js           ioredis client (Sentinel support)

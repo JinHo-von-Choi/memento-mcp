@@ -72,7 +72,7 @@ L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색
 
 - master key (`MEMENTO_ACCESS_KEY`): `permissions=null`로 처리되며 모든 도구를 호출할 수 있다.
 - API key (`mmcp_xxx`): 키 생성 시 지정된 `permissions` 배열 기준으로 도구 접근이 제한된다. 배열에 필요한 권한이 없으면 즉시 거부된다.
-- **default-deny**: `TOOL_PERMISSIONS` 맵에 등록되지 않은 도구명은 권한과 무관하게 항상 거부된다 (`reason: "unknown_tool"`).
+- `TOOL_PERMISSIONS` 맵에 등록된 도구는 해당 권한 레벨이 요구된다. 맵에 등록되지 않은 도구명은 `required=null`로 간주되어 권한 검사를 통과한다. 신규 도구를 RBAC 경계에 편입하려면 `TOOL_PERMISSIONS` 맵에 명시적으로 등록해야 한다.
 - 권한 레벨은 세 가지다: `read`(recall/context/memory_stats 등), `write`(remember/forget/amend 등), `admin`(memory_consolidate/apply_update 등). `admin` 권한을 가진 키는 모든 레벨을 호출할 수 있다.
 - 타 테넌트(다른 API 키)가 소유한 파편에 forget/amend/link 요청 시 `"Fragment not found"` 에러가 반환된다. SQL 레벨에서 `key_id` 조건으로 격리되므로 존재 여부조차 노출되지 않는다.
 
