@@ -826,3 +826,82 @@ Activated by setting environment variable `ENABLE_SPREADING_ACTIVATION=true`.
 4. Stores results in a 10-minute TTL Redis cache, optimizing repeated calls within the same context
 
 Activated fragments receive an importance boost through `computeEmaRankBoost()` during search result ranking, placing contextually relevant results higher.
+
+---
+
+## Symbolic Memory Layer (v2.8.0, opt-in)
+
+A verification-only layer placed on top of the v2.7.0 probabilistic search pipeline. Disabled by default across the board. No replacement of existing components.
+
+### Principles
+
+- Verification-only. The FragmentSearch/RRF/Reranker/SpreadingActivation paths are immutable
+- All flags default to false — behavior in default state is byte-for-byte identical to v2.7.0
+- Fail-open: detector errors are swallowed; on SymbolicOrchestrator timeout (50ms), fallback applies
+- Tenant isolation: v2.7.0 14 fixes + v2.8.0 Phase 0.5 SessionLinker patch (4-arg) = full coverage
+
+### Hook Chain (FragmentSearch.search after line 88)
+
+```
+probabilistic result
+    │
+    ├── shadow hook (Phase 1: observeLatency record only)
+    │
+    ├── explain hook (Phase 2: ExplanationBuilder.annotate)
+    │       └── 6 reason codes: direct_keyword_match / semantic_similarity
+    │           / graph_neighbor_1hop / temporal_proximity
+    │           / case_cohort_member / recent_activity_ema
+    │
+    ├── cbr filter (Phase 5: CbrEligibility 4 constraints)
+    │       └── tenant_match / has_case_id / not_quarantine / resolved_state
+    │
+    └── annotated result → caller
+```
+
+### 9 Core Modules + 5 Rule Files
+
+| Module | Role | Phase |
+|--------|------|-------|
+| SymbolicOrchestrator | rule_version / correlation_id / timeout / fallback management | 0 |
+| SymbolicMetrics | prom-client 4 metrics (claim/warning/gate_blocked/latency) | 0 |
+| ClaimExtractor | Morpheme-based polarity claim extraction | 1 |
+| ClaimStore | TEXT key_id + `IS NOT DISTINCT FROM` isolation | 1 |
+| ClaimConflictDetector | Polarity conflict + severity heuristic | 3 |
+| LinkIntegrityChecker | Cycle detection (reuses sessionLinker.wouldCreateCycle) | 3 |
+| ExplanationBuilder | 6 reason codes annotate (immutable copy) | 2 |
+| PolicyRules | 5 predicate soft gating | 4 |
+| CbrEligibility | 4-constraint CBR filter | 5 |
+
+Rule files (`lib/symbolic/rules/v1/`): `explain.js`, `link-integrity.js`, `claim-conflict.js`, `policy.js`, `proactive-gate.js`
+
+### Storage Schema
+
+**migration-032: fragment_claims**
+- `fragment_id TEXT REFERENCES fragments(id)`
+- `key_id TEXT` (replicates v2.7.0 migration-031 content-hash pattern)
+- `rule_version TEXT`
+- `polarity TEXT`, `subject TEXT`, `predicate TEXT`
+- `validation_warnings JSONB`
+- 2 partial unique indexes: `(fragment_id) WHERE key_id IS NULL` / `(fragment_id, key_id) WHERE key_id IS NOT NULL`
+
+**migration-033: api_keys.symbolic_hard_gate**
+- `BOOLEAN DEFAULT false`
+- Per-key opt-in to switch soft → hard gate
+
+### Observability
+
+4 Prometheus metrics (labels: `rule`, `phase`):
+- `memento_symbolic_claim_extracted_total` — ClaimExtractor extraction count
+- `memento_symbolic_warning_total` — advisory warning generation count
+- `memento_symbolic_gate_blocked_total{phase}` — block count per phase (phase=cbr|proactive etc.)
+- `memento_symbolic_op_latency_ms` — orchestrator call latency histogram
+
+### Staged Rollout
+
+Refer to CHANGELOG.md v2.8.0 Migration Guide, 8 steps.
+
+### Tenant Isolation (Phase 0.5)
+
+Seals the blind spot in SessionLinker.wouldCreateCycle that was missed by the v2.7.0 9260ff2 tenant isolation fix. Extended `store.isReachable` to a 4-arg signature; all 4 call sites (`autoLinkSessionFragments`, `ReflectProcessor`, `MemoryManager._autoLinkSessionFragments`, `_wouldCreateCycle`) fully propagated. Regression guard: 6 new test cases in `tests/unit/tenant-isolation.test.js`.
+
+---
