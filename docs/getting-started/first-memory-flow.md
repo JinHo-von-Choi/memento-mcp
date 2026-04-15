@@ -2,7 +2,7 @@
 title: "First Memory Flow"
 date: 2026-03-13
 author: 최진호
-updated: 2026-03-13
+updated: 2026-04-16
 ---
 
 # First Memory Flow
@@ -90,3 +90,4 @@ curl -s -X POST http://localhost:57332/mcp \
 - Claude Code와 연결하려면 [Claude Code Configuration](claude-code.md)
 - Windows 환경이라면 [Windows WSL2 Setup](windows-wsl2.md) 또는 [Windows PowerShell Setup](windows-powershell.md)
 - 오류가 나면 [Troubleshooting](troubleshooting.md)
+- v2.8.0 옵션: Symbolic Memory 활성화 방법은 [docs/configuration.md](../configuration.md) 및 [CHANGELOG.md](../../CHANGELOG.md) 참조.

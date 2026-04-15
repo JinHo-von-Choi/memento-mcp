@@ -2,7 +2,7 @@
 title: "Quick Start"
 date: 2026-03-13
 author: 최진호
-updated: 2026-04-10
+updated: 2026-04-16
 ---
 
 # Quick Start
@@ -152,3 +152,5 @@ curl -s -X POST http://localhost:57332/mcp \
 ```
 
 다음 단계는 [First Memory Flow](first-memory-flow.md) 문서를 따라 `context`, `remember`, `recall` 사용 흐름을 검증하는 것이다.
+
+v2.8.0 옵션: Symbolic Memory 활성화 방법은 [docs/configuration.md](../configuration.md) 및 [CHANGELOG.md](../../CHANGELOG.md) 참조.
