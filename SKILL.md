@@ -1071,6 +1071,10 @@ recall 또는 context 응답에 `_memento_hint` 필드가 있으면:
 | Planner 역할로 고수준 계획 수립 | recall(depth="high-level") |
 | Executor 역할로 구체적 절차 참조 | recall(depth="tool-level") |
 
+## LLM Provider Fallback (v2.8.0)
+
+Gemini CLI 외 12개 외부 provider로 자동 fallback 가능. 설정: `LLM_PRIMARY=gemini-cli` (기본) + `LLM_FALLBACKS` JSON 배열. env 미설정 시 기존 Gemini CLI 단독 동작 유지. 자세한 운영은 `docs/operations/llm-providers.md` 참조.
+
 ## v2.8.0 Symbolic Memory 활용 (opt-in)
 
 모든 `MEMENTO_SYMBOLIC_*` 플래그는 기본 `false`다. 아래 기능은 해당 플래그를 명시적으로 활성화한 환경에서만 동작한다.

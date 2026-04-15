@@ -59,6 +59,41 @@
 
 `api_keys.symbolic_hard_gate` 컬럼 (migration-033)으로 키 단위 hard gate 전환 가능. 기본 false. true로 설정 시 PolicyRules violations 발생 시 저장이 거부되고 JSON-RPC **프로토콜 레벨** 에러 `-32003`으로 응답한다 (MCP 도구 에러 아님 — `error.data.violations: string[]` 포함). 마스터 키(keyId=NULL) 제외. 캐시 TTL 30초.
 
+#### LLM Provider Fallback Chain (v2.8.0)
+
+Gemini CLI 외 12개 provider로 자동 fallback 가능. 기본값에서 기존 동작 완전 보존.
+
+##### 기본 설정
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| LLM_PRIMARY | gemini-cli | 주 provider 이름. gemini-cli는 env 설정 불필요 |
+| LLM_FALLBACKS | (없음) | JSON 배열. 각 원소에 provider/apiKey/model/baseUrl/timeoutMs/extraHeaders 지정 |
+
+##### Circuit Breaker
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| LLM_CB_FAILURE_THRESHOLD | 5 | 연속 실패 허용 횟수. 초과 시 해당 provider OPEN 상태 전환 |
+| LLM_CB_OPEN_DURATION_MS | 60000 | OPEN 지속 시간 (ms). 경과 후 자동 CLOSE |
+| LLM_CB_FAILURE_WINDOW_MS | 60000 | 실패 카운트 윈도우 (ms) |
+
+REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
+
+##### Token Usage Cap
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| LLM_TOKEN_BUDGET_INPUT | (없음) | 입력 토큰 상한. 설정 시 초과 요청 거부. 미설정 시 관측만 |
+| LLM_TOKEN_BUDGET_OUTPUT | (없음) | 출력 토큰 상한 |
+| LLM_TOKEN_BUDGET_WINDOW_SEC | 86400 | 리셋 주기 (초). 기본 1일 |
+
+##### 지원 Provider 목록
+
+gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai
+
+자세한 운영 가이드는 `docs/operations/llm-providers.md` 참조.
+
 #### OAuth 토큰 TTL
 
 OAuth 토큰 TTL은 세션 TTL과 연동된다.

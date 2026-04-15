@@ -59,6 +59,41 @@ All flags default to `false` / noop. With default values, behavior must be ident
 
 The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard gate switching. Defaults to false. When set to true, PolicyRules violations cause the remember() call to be rejected with a JSON-RPC **protocol-level** error `-32003` (not an MCP tool error — `error.data.violations: string[]` included). Master keys (keyId=NULL) are excluded. Cache TTL is 30 seconds.
 
+#### LLM Provider Fallback Chain (v2.8.0)
+
+Automatic fallback to 12 providers beyond Gemini CLI. Existing behavior is fully preserved with default settings.
+
+##### Basic Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| LLM_PRIMARY | gemini-cli | Primary provider name. gemini-cli requires no env configuration |
+| LLM_FALLBACKS | (none) | JSON array. Each element specifies provider/apiKey/model/baseUrl/timeoutMs/extraHeaders |
+
+##### Circuit Breaker
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| LLM_CB_FAILURE_THRESHOLD | 5 | Consecutive failure tolerance. Exceeding this threshold transitions the provider to OPEN state |
+| LLM_CB_OPEN_DURATION_MS | 60000 | OPEN state duration (ms). Automatically transitions to CLOSED after this interval |
+| LLM_CB_FAILURE_WINDOW_MS | 60000 | Failure count window (ms) |
+
+When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
+
+##### Token Usage Cap
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| LLM_TOKEN_BUDGET_INPUT | (none) | Input token cap. When set, requests exceeding the cap are rejected. When unset, observation only |
+| LLM_TOKEN_BUDGET_OUTPUT | (none) | Output token cap |
+| LLM_TOKEN_BUDGET_WINDOW_SEC | 86400 | Reset interval (seconds). Default 1 day |
+
+##### Supported Providers
+
+gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai
+
+For detailed operational guidance, see `docs/operations/llm-providers.md`.
+
 #### OAuth Token TTL
 
 OAuth token TTLs are linked to the session TTL.
