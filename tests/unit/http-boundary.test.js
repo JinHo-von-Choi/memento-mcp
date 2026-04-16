@@ -287,12 +287,12 @@ describe("OAuth metadata scheme detection", () => {
    */
 
   it("getAuthServerMetadata에 https baseUrl 전달 시 모든 엔드포인트가 https", () => {
-    const meta = getAuthServerMetadata("https://pmcp.nerdvana.kr");
+    const meta = getAuthServerMetadata("https://mcp.example.com");
 
-    assert.strictEqual(meta.issuer, "https://pmcp.nerdvana.kr");
-    assert.strictEqual(meta.authorization_endpoint, "https://pmcp.nerdvana.kr/authorize");
-    assert.strictEqual(meta.token_endpoint, "https://pmcp.nerdvana.kr/token");
-    assert.strictEqual(meta.service_documentation, "https://pmcp.nerdvana.kr/docs");
+    assert.strictEqual(meta.issuer, "https://mcp.example.com");
+    assert.strictEqual(meta.authorization_endpoint, "https://mcp.example.com/authorize");
+    assert.strictEqual(meta.token_endpoint, "https://mcp.example.com/token");
+    assert.strictEqual(meta.service_documentation, "https://mcp.example.com/docs");
   });
 
   it("getAuthServerMetadata에 http baseUrl 전달 시 모든 엔드포인트가 http", () => {
@@ -314,15 +314,15 @@ describe("OAuth metadata scheme detection", () => {
 
     /** X-Forwarded-Proto: http → 여전히 https:// */
     const req1 = {
-      headers: { host: "pmcp.nerdvana.kr", "x-forwarded-proto": "http" }
+      headers: { host: "mcp.example.com", "x-forwarded-proto": "http" }
     };
-    assert.strictEqual(buildBaseUrl(req1), "https://pmcp.nerdvana.kr");
+    assert.strictEqual(buildBaseUrl(req1), "https://mcp.example.com");
 
     /** X-Forwarded-Proto: https → https:// */
     const req2 = {
-      headers: { host: "pmcp.nerdvana.kr", "x-forwarded-proto": "https" }
+      headers: { host: "mcp.example.com", "x-forwarded-proto": "https" }
     };
-    assert.strictEqual(buildBaseUrl(req2), "https://pmcp.nerdvana.kr");
+    assert.strictEqual(buildBaseUrl(req2), "https://mcp.example.com");
 
     /** host 헤더 없음 → https://localhost:57332 */
     const req3 = { headers: {} };

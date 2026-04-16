@@ -682,14 +682,14 @@ describe("CORS — Access-Control-Allow-Origin header", () => {
       pathname: `${ADMIN_BASE}/auth`,
       headers:  {
         authorization: `Bearer ${MASTER_KEY}`,
-        origin:        "https://admin.nerdvana.kr"
+        origin:        "https://admin.example.com"
       }
     });
     const res = fakeRes();
 
     await routeAdminApi(req, res, { accessKey: MASTER_KEY });
 
-    assert.strictEqual(res._headers["access-control-allow-origin"], "https://admin.nerdvana.kr");
+    assert.strictEqual(res._headers["access-control-allow-origin"], "https://admin.example.com");
   });
 
   it("Origin 헤더가 없으면 '*' 반환", async () => {
