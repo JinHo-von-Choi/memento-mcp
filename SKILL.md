@@ -2,6 +2,15 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
+## 현재 버전: v2.8.0
+
+v2.8.0은 v2.7.0 확률론적 검색 파이프라인 위에 **Symbolic Verification Layer**를 추가했다. 모든 `MEMENTO_SYMBOLIC_*` 플래그는 기본 `false`이므로 업그레이드 시 회귀는 없다. 신규 기능 활용 가이드는 이 문서 하단의 `v2.8.0 Symbolic Memory 활용` 섹션과 `LLM Provider Fallback (v2.8.0)` 섹션을 참조한다. 하위의 `v2.7.0 Breaking Changes`는 v2.7.0 이전 버전에서 업그레이드하는 경우에만 적용되며, v2.8.0에서도 여전히 유효하다.
+
+신규 응답 필드 요약:
+- `remember` → `validation_warnings: string[]` (`MEMENTO_SYMBOLIC_POLICY_RULES=true` 시, rule 이름 배열)
+- `recall` → 각 파편의 `explanations: [{code, detail, ruleVersion}]` (`MEMENTO_SYMBOLIC_EXPLAIN=true` 시)
+- 에러 `-32003 SYMBOLIC_POLICY_VIOLATION` (해당 키의 `symbolic_hard_gate=true` 상태에서 PolicyRules 위반 시)
+
 ## v2.7.0 Breaking Changes
 
 v2.7.0은 보안 강화를 위한 호환성 비보장 변경을 포함한다. 기존 배포 환경에서 업그레이드 시 반드시 아래 항목을 확인하고 환경변수를 갱신해야 한다.
