@@ -141,7 +141,7 @@ reflect 규칙:
    - topic도 프로젝트명으로 설정: `topic: "memento-mcp"`
 
 2. 디바이스/호스트 구분이 가능한 경우: hostname 포함
-   - 작업 디렉토리 경로에서 추출 (예: /home/nirna -> "nerdvana")
+   - 작업 디렉토리 경로에서 추출 (예: /srv/apps/paysvc -> "paysvc")
    - 환경변수, 시스템 정보에서 추출 (예: os.hostname())
    - 예: `keywords: ["memento-mcp", "nerdvana", "oauth"]`
 
