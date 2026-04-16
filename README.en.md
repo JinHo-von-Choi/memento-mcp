@@ -81,20 +81,23 @@ npm run migrate
 
 ### Claude Code Integration
 
-Add to `.claude/settings.json`:
+Register via the `claude mcp add` CLI. HTTP-type MCP servers placed manually in `settings.json` will not be recognized by Claude Code.
 
-```json
-{
-  "mcpServers": {
-    "memento": {
-      "url": "http://localhost:57332/mcp",
-      "headers": { "Authorization": "Bearer YOUR_ACCESS_KEY" }
-    }
-  }
-}
+```bash
+claude mcp add memento http://localhost:57332/mcp \
+  --transport http \
+  --scope user \
+  --header "Authorization: Bearer YOUR_ACCESS_KEY"
 ```
 
-See [Claude Code Configuration](docs/getting-started/claude-code.md) for details.
+The registration is persisted to `~/.claude.json`. Verify:
+
+```bash
+claude mcp list
+# memento: http://localhost:57332/mcp (HTTP) - ✓ Connected
+```
+
+For project-scoped sharing, declare the server in `.mcp.json` at the repository root instead. See [Claude Code Configuration](docs/getting-started/claude-code.md) for details.
 
 ### Supported Environments
 
@@ -110,7 +113,7 @@ Memento is a standard MCP (Model Context Protocol) server. It works with any AI 
 
 | Platform | Config Location | Transport |
 |----------|----------------|-----------|
-| Claude Code | ~/.claude/settings.json | Streamable HTTP |
+| Claude Code | `claude mcp add` CLI (`~/.claude.json`) or `.mcp.json` | Streamable HTTP |
 | Claude Desktop | claude_desktop_config.json | Streamable HTTP |
 | Claude.ai Web | Settings > Integrations | OAuth (RFC 7591) |
 | Cursor | .cursor/mcp.json | Streamable HTTP |
