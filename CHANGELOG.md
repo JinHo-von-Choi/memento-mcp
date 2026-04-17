@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.8.7] - 2026-04-17
+
+### Fixed
+
+- **`FragmentReader.getByIds` PostgreSQL "malformed array literal" 에러**: `key_id = ANY($3)` SQL에 단일 UUID 문자열을 그대로 바인딩하여 PG가 배열 파싱 시 실패했다. 호출 측이 `keyId`를 문자열로 전달하는 경우 배열로 래핑(`[keyId]`)하도록 수정. 영향 경로: `FragmentSearch.fetch`(missing IDs 조회), `RememberPostProcessor.linkedTo 소유권 확인`, `SessionLinker.autoLinkSessionFragments` — 간헐적 recall/remember/link 실패 원인이었다. (`lib/memory/FragmentReader.js`)
+
 ## [2.8.6] - 2026-04-17
 
 ### Changed
