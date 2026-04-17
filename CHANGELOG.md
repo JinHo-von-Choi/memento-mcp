@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.8.4] - 2026-04-17
+
+### Changed
+
+- **`/register` Authorization Bearer 바인딩 전략 변경**: v2.8.3의 API 키 원문을 `client_id`로 사용하는 방식을 폐기. 원문 키가 URL·브라우저 히스토리·프록시 로그에 그대로 노출되는 문제를 해결. 이제 `client_id = "<name>_<keyIdHex8>"` (URL-safe 이름 + UUID 앞 8자 hex suffix)으로 등록한다. `validateRedirectUri` 엄격 검증이 기본 방어선이므로 보안 강도는 동일하게 유지된다. (`lib/handlers/oauth-handler.js`)
+
+### Added
+
+- **`client_name = "apikey:<keyId>"` 내부 바인딩 마커**: 스키마 변경 없이 `oauth_clients.client_name` 필드에 keyId UUID를 인코딩. `/authorize` 경로에서 이 마커를 파싱하여 `validateApiKeyById`로 tenant 격리 컨텍스트를 복원한다.
+- **`validateApiKeyById(id)` 신규 함수** (`lib/admin/ApiKeyStore.js`): UUID 기반 API 키 조회. 원시 키 없이 keyId만으로 권한 정보(`keyId`, `name`, `groupKeyIds`, `permissions`, `defaultWorkspace`)를 반환.
+- **`validateApiKeyFromDB` 반환 객체에 `name` 필드 추가**: 기존 반환 구조를 확장하여 `name` 필드를 포함. 하위 호환 유지.
+- **`bound_key_id` 필드 전파**: `codeData` → `accessData`/`refreshData` → `validateAccessToken` 반환 객체까지 `bound_key_id`가 완전 전파. refresh_token 갱신 시에도 승계됨.
+- **`validateAuthentication` bound_key_id 우선 경로** (`lib/auth.js`): OAuth 토큰의 `bound_key_id`가 있으면 `validateApiKeyById`로 1순위 처리. 기존 `is_api_key` 경로는 2순위로 유지 (v2.8.3 호환). non-API-key OAuth 거부는 3순위.
+- **신규 메트릭** 3종:
+  - `mcp_oauth_bound_client_registered_total`: name-based binding 등록 성공 횟수
+  - `mcp_oauth_bound_client_authorized_total`: bound_key_id 경로로 /authorize 진입 횟수
+  - `mcp_oauth_bound_client_authenticated_total`: bound_key_id 경로 인증 성공 횟수
+- **신규 테스트** (`tests/unit/oauth-name-based-client-id.test.js`): 29개 케이스 (client_id 생성, client_name 마커, backward compat, bound_key_id 전파, refresh_token 승계, validateAuthentication 우선순위, 패턴 매칭 경계 케이스).
+
+### Notes
+
+- v2.8.3에서 전체 API 키 문자열을 `client_id`로 등록한 기존 Redis 토큰은 `bound_key_id=null`로 2순위 `is_api_key` 경로를 통해 정상 동작. backward compat 완전 보장.
+- DB 스키마 변경 없음. migration 추가 불필요.
+
 ## [2.8.3] - 2026-04-17
 
 ### Fixed

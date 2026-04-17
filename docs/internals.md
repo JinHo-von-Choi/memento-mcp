@@ -145,11 +145,24 @@ SSE 스트림이 닫히면(`res.on('close')`) 서버는 SSE 응답 객체만 제
 
 ### OAuth 보안 모델 — keyId가 없는 OAuth는 master 권한이 아님
 
-`validateAuthentication`의 OAuth 분기는 세 가지 경로로 분기된다.
+`validateAuthentication`의 OAuth 분기는 세 가지 우선순위 경로로 처리된다.
 
-1. **is_api_key=true**: `client_id`가 원본 API 키이므로 `validateApiKeyFromDB(client_id)`로 `keyId`를 조회하여 반환한다. 이 경로만 API 키 테넌트 격리가 적용된다.
-2. **is_api_key=false + MCP_REJECT_NONAPIKEY_OAUTH=true (기본)**: `keyId=null` 세션 생성을 차단하고 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` 카운터와 `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가.
-3. **is_api_key=false + MCP_REJECT_NONAPIKEY_OAUTH=false**: 하위 호환 동작. `{ valid: true, oauth: true, client_id: ... }` 반환. 이 경로는 `keyId=null`을 생성하므로 master 권한 세션과 동일하게 동작한다. 운영 환경에서 절대 사용하지 말 것.
+1. **bound_key_id 경로 (v2.8.4, 1순위)**: 토큰의 `bound_key_id` 필드가 있으면 `validateApiKeyById(bound_key_id)`로 UUID 직접 조회. name-based client_id 바인딩 방식이 이 경로를 사용한다. 성공 시 `keyId`/`groupKeyIds`/`permissions` 반환. `mcp_oauth_bound_client_authenticated_total` 카운터 증가.
+2. **is_api_key=true 경로 (v2.8.3 호환, 2순위)**: `client_id`가 원본 API 키 문자열인 경우 `validateApiKeyFromDB(client_id)`로 조회. bound_key_id 조회 실패 시에도 이 경로로 낙하.
+3. **non-API-key OAuth (3순위)**: `MCP_REJECT_NONAPIKEY_OAUTH=true`(기본)이면 `{ valid: false, error: "non-API-key OAuth denied" }` 반환. `mcp_oauth_nonapikey_rejected_total` + `memento_tenant_isolation_blocked_total{component="oauth_nonapikey_denied"}` 카운터 증가. `false`이면 하위 호환 동작 (`keyId=null` 세션 — 운영 환경에서 절대 사용하지 말 것).
+
+### OAuth name-based client_id 바인딩 (v2.8.4)
+
+`POST /register` 시 `Authorization: Bearer <API 키>` 헤더가 유효하면:
+
+- `client_id = "<name>_<keyIdHex8>"` — API 키 `name` 필드 + UUID 앞 8자 hex suffix. URL-safe, 예측 불가, 충돌 방지.
+- `client_name = "apikey:<keyId UUID>"` — 서버 내부 바인딩 마커. `oauth_clients` 테이블의 기존 `client_name` 컬럼을 재사용하며 스키마 변경 없음.
+
+`/authorize` 처리 시 `getClient(client_id)`로 등록된 클라이언트를 조회한 뒤 `client_name`이 `apikey:<uuid>` 패턴이면 `validateApiKeyById(uuid)`로 유효성 확인. 성공 시 `bound_key_id`를 codeData에 기록하고 `/token` 발급까지 전파. `validateAccessToken` 반환에도 `bound_key_id` 포함.
+
+헤더 없거나 유효하지 않으면 기존 랜덤 client_id 생성(fallback)으로 처리되며, 이 경우 `REJECT_NONAPIKEY_OAUTH` 정책에 의해 토큰이 거부된다.
+
+v2.8.3에서 API 키 원문을 client_id로 등록한 기존 Redis 토큰은 `bound_key_id=null`이므로 2순위 `is_api_key` 경로로 정상 처리된다 (backward compat).
 
 **AUTO-REGISTRATION 차단**: `/authorize` GET 요청에서 미등록 `client_id`가 유효한 `redirect_uri`만 있으면 자동으로 클라이언트를 생성하던 경로는 `MCP_ALLOW_AUTO_DCR_REGISTER=false`(기본)로 차단된다. 미등록 클라이언트는 반드시 `POST /register`(RFC 7591)로 사전 등록해야 한다. 차단 시 `mcp_oauth_auto_register_blocked_total` 카운터 증가.
 

@@ -125,7 +125,7 @@ RFC 7591 동적 클라이언트 등록. 인증 불필요.
 }
 ```
 
-> API 키(mmcp_xxx)를 `client_id`로 직접 사용할 수 있다. Claude.ai Web Integration에서 기존 API 키를 OAuth 클라이언트로 재사용하는 경우에 해당한다.
+> **API 키 바인딩 (v2.8.4)**: `Authorization: Bearer <API 키>` 헤더를 함께 전송하면 `client_id = "<name>_<keyIdHex8>"` 형식의 URL-safe 이름으로 자동 등록된다. 이후 `/authorize`에서 해당 API 키의 tenant 격리 컨텍스트가 자동 복원된다. 헤더 없이 등록하면 기존 랜덤 `client_id` 방식으로 fallback된다.
 
 ### GET /authorize
 
