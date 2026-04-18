@@ -60,9 +60,24 @@ echo
 # Server
 info "Server"
 PORT=$(ask "Port" "57332")
-SESSION_TTL=$(ask "Session TTL (minutes)" "60")
+SESSION_TTL=$(ask "Session TTL (minutes)" "43200")
 LOG_DIR=$(ask "Log directory" "/var/log/mcp")
-MEMENTO_ACCESS_KEY=$(ask_secret "Access key (MEMENTO_ACCESS_KEY, leave blank to disable auth)")
+
+MEMENTO_ACCESS_KEY=""
+MEMENTO_AUTH_DISABLED=""
+
+while true; do
+  MEMENTO_ACCESS_KEY=$(ask_secret "Access key (MEMENTO_ACCESS_KEY, leave blank for dev mode)")
+  if [[ -n "$MEMENTO_ACCESS_KEY" ]]; then
+    break
+  fi
+  warn "MEMENTO_ACCESS_KEY is required from v2.7.0. Blank value causes server startup failure."
+  if ask_yn "Disable authentication instead? (dev only -- sets MEMENTO_AUTH_DISABLED=true)" "n"; then
+    MEMENTO_AUTH_DISABLED="true"
+    break
+  fi
+  warn "Please enter a non-empty access key, or choose to disable authentication."
+done
 
 echo
 
@@ -96,12 +111,13 @@ echo
 
 # Embedding provider
 info "Embedding Provider"
-echo "  1) openai   (text-embedding-3-small, 1536 dims)"
-echo "  2) gemini   (gemini-embedding-001, 3072 dims)"
-echo "  3) ollama   (local, nomic-embed-text)"
-echo "  4) localai  (local OpenAI-compatible)"
-echo "  5) custom   (manual configuration)"
-echo "  6) none     (disable semantic search)"
+echo "  1) openai        (text-embedding-3-small, 1536 dims)"
+echo "  2) gemini        (gemini-embedding-001, 3072 dims)"
+echo "  3) ollama        (local, nomic-embed-text)"
+echo "  4) localai       (local OpenAI-compatible)"
+echo "  5) custom        (manual configuration)"
+echo "  6) none          (disable semantic search)"
+echo "  7) transformers  (local, no API key, ~150MB)"
 EMBED_CHOICE=$(ask "Choice" "1")
 
 EMBEDDING_PROVIDER=""; EMBEDDING_API_KEY=""; EMBEDDING_MODEL=""
@@ -119,7 +135,7 @@ case "$EMBED_CHOICE" in
     EMBEDDING_API_KEY=$(ask_secret "Gemini API Key")
     EMBEDDING_MODEL=$(ask "Model" "gemini-embedding-001")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions" "3072")
-    warn "3072 dims requires migration-007 on first use."
+    warn "3072 dims: fragments + morpheme_dict 두 테이블을 동시 처리합니다 (v2.9.0+). migration-007 required."
     ;;
   3)
     EMBEDDING_PROVIDER="ollama"
@@ -141,7 +157,46 @@ case "$EMBED_CHOICE" in
   6)
     EMBEDDING_PROVIDER=""
     ;;
+  7)
+    EMBEDDING_PROVIDER="transformers"
+    echo "  a) Xenova/multilingual-e5-small (384d, ~150MB, default)"
+    echo "  b) Xenova/bge-m3               (1024d, ~600MB, high quality multilingual)"
+    EMBED_MODEL_CHOICE=$(ask "Model" "a")
+    if [[ "$EMBED_MODEL_CHOICE" == "b" ]]; then
+      EMBEDDING_MODEL="Xenova/bge-m3"
+      EMBEDDING_DIMENSIONS="1024"
+    else
+      EMBEDDING_MODEL="Xenova/multilingual-e5-small"
+      EMBEDDING_DIMENSIONS="384"
+    fi
+    warn "API keys (OPENAI/GEMINI/EMBEDDING_API_KEY) must NOT be set -- 상호 배타 가드."
+    warn "Initial model download (~120MB) on first use."
+    warn "fragments + morpheme_dict 두 테이블을 동시 처리합니다 (v2.9.0+). migration-007 required."
+    ;;
 esac
+
+echo
+
+# LLM provider chain
+info "LLM Provider Chain (formateme/consolidate/reflect 등에 사용)"
+echo "  1) gemini-cli   (local CLI, requires 'gemini' binary login)"
+echo "  2) codex-cli    (local CLI)"
+echo "  3) copilot-cli  (local CLI)"
+echo "  4) skip         (기능 일부 fallback)"
+LLM_PRIMARY_CHOICE=$(ask "Primary provider" "1")
+
+LLM_PRIMARY=""
+case "$LLM_PRIMARY_CHOICE" in
+  1) LLM_PRIMARY="gemini-cli" ;;
+  2) LLM_PRIMARY="codex-cli" ;;
+  3) LLM_PRIMARY="copilot-cli" ;;
+  4) LLM_PRIMARY="" ;;
+esac
+
+LLM_FALLBACKS=""
+if [[ -n "$LLM_PRIMARY" ]] && ask_yn "Configure fallback chain (recommended)?" "y"; then
+  LLM_FALLBACKS='[{"provider":"codex-cli"},{"provider":"copilot-cli"}]'
+fi
 
 echo
 
@@ -165,6 +220,10 @@ if [[ -n "$MEMENTO_ACCESS_KEY" ]]; then
   echo "MEMENTO_ACCESS_KEY=${MEMENTO_ACCESS_KEY}" >> "$ENV_FILE"
 else
   echo "# MEMENTO_ACCESS_KEY=" >> "$ENV_FILE"
+fi
+
+if [[ -n "$MEMENTO_AUTH_DISABLED" ]]; then
+  echo "MEMENTO_AUTH_DISABLED=${MEMENTO_AUTH_DISABLED}" >> "$ENV_FILE"
 fi
 
 cat >> "$ENV_FILE" <<EOF
@@ -251,6 +310,23 @@ fi
 
 cat >> "$ENV_FILE" <<EOF
 
+# --- LLM Provider Chain ----------------------------------------------
+EOF
+
+if [[ -n "$LLM_PRIMARY" ]]; then
+  echo "LLM_PRIMARY=${LLM_PRIMARY}" >> "$ENV_FILE"
+else
+  echo "# LLM_PRIMARY=" >> "$ENV_FILE"
+fi
+
+if [[ -n "$LLM_FALLBACKS" ]]; then
+  echo "LLM_FALLBACKS=${LLM_FALLBACKS}" >> "$ENV_FILE"
+else
+  echo "# LLM_FALLBACKS=" >> "$ENV_FILE"
+fi
+
+cat >> "$ENV_FILE" <<EOF
+
 # --- NLI (Natural Language Inference) --------------------------------
 # NLI_SERVICE_URL=
 # NLI_TIMEOUT_MS=5000
@@ -276,7 +352,7 @@ echo
 # DB schema
 if ask_yn "Apply PostgreSQL schema?" "y"; then
   echo "  1) Fresh install (memory-schema.sql)"
-  echo "  2) Upgrade existing (migration-001 through 013)"
+  echo "  2) Upgrade existing (run all migration-*.sql files)"
   SCHEMA_CHOICE=$(ask "Choice" "1")
 
   export DATABASE_URL
@@ -287,20 +363,29 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
     success "Schema applied."
   else
     info "Running migrations..."
-    for i in 001 002 003 004 005 006 007 008 009 010 011 012 013; do
-      f="lib/memory/migration-${i}-"*".sql"
-      if compgen -G "$f" > /dev/null; then
-        psql "$DATABASE_URL" -f $f && success "migration-${i} done." || warn "migration-${i} failed (may already be applied)."
+    for f in lib/memory/migration-*.sql; do
+      if [[ -f "$f" ]]; then
+        psql "$DATABASE_URL" -f "$f" && success "$(basename "$f") done." || warn "$(basename "$f") failed (may already be applied)."
       fi
     done
   fi
 
-  if [[ -n "$EMBEDDING_PROVIDER" ]] && [[ "${EMBEDDING_DIMENSIONS:-0}" -gt 2000 ]]; then
-    warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000 -- migration-007 required."
-    if ask_yn "Run migration-007?" "y"; then
-      EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" DATABASE_URL="$DATABASE_URL" \
-        node scripts/migration-007-flexible-embedding-dims.js
-      success "migration-007 done."
+  if [[ -n "$EMBEDDING_PROVIDER" ]]; then
+    _run_migration_007=false
+    if [[ "${EMBEDDING_DIMENSIONS:-0}" -gt 2000 ]]; then
+      warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000: fragments + morpheme_dict 두 테이블을 동시 처리합니다 (v2.9.0+). migration-007 required."
+      _run_migration_007=true
+    elif [[ "$EMBEDDING_PROVIDER" == "transformers" ]]; then
+      warn "transformers provider: fragments + morpheme_dict 두 테이블을 동시 처리합니다 (v2.9.0+). migration-007 recommended."
+      _run_migration_007=true
+    fi
+
+    if [[ "$_run_migration_007" == "true" ]]; then
+      if ask_yn "Run migration-007 (embedding dimension update)?" "y"; then
+        EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" DATABASE_URL="$DATABASE_URL" \
+          node scripts/migration-007-flexible-embedding-dims.js
+        success "migration-007 done."
+      fi
     fi
   fi
 
@@ -308,6 +393,13 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
     if ask_yn "Run L2 normalization on existing vectors? (one-time)" "y"; then
       node scripts/normalize-vectors.js
       success "L2 normalization done."
+
+      if ask_yn "Verify embedding dimension consistency (fragments + morpheme_dict)?" "y"; then
+        DATABASE_URL="$DATABASE_URL" EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" \
+          node -e "import('./scripts/check-embedding-consistency.js').then(async ({ checkEmbeddingConsistency }) => { const ok = await checkEmbeddingConsistency(); process.exit(ok ? 0 : 1); });" \
+          && success "Consistency check passed." \
+          || warn "Consistency check failed. See above for details."
+      fi
     fi
   fi
 fi
@@ -316,4 +408,9 @@ echo
 echo -e "${GREEN}${BOLD}------------------------------------------${RESET}"
 echo -e "${GREEN}${BOLD}  Setup complete. Start: node server.js${RESET}"
 echo -e "${GREEN}${BOLD}------------------------------------------${RESET}"
+echo
+echo "Next steps:"
+echo "  - Test health:    curl http://localhost:${PORT}/health"
+echo "  - Integration:    npm run test:integration:llm  (requires E2E_LLM_* env vars)"
+echo "  - Documentation:  docs/INSTALL.md, docs/embedding-local.md, SKILL.md"
 echo
