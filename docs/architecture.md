@@ -98,7 +98,11 @@ server.js  (HTTP 서버)
             ├── migration-028-composite-indexes.sql  (agent_id, topic, created_at DESC) 복합 인덱스 + (key_id, agent_id, importance DESC) 부분 인덱스 (QuotaChecker/FragmentReader 최적화)
             ├── migration-029-search-param-thresholds.sql  search_param_thresholds 테이블 (SearchParamAdaptor 온라인 학습 저장소, key_id NOT NULL DEFAULT -1)
             ├── migration-030-search-param-thresholds-key-text.sql  search_param_thresholds.key_id INTEGER→TEXT 변환 (fragments.key_id TEXT 타입과 통일, sentinel -1 → '-1')
-            └── migration-031-content-hash-per-key.sql  content_hash 전역 UNIQUE 인덱스 폐기 후 partial unique index 2개로 전환 (크로스 테넌트 ON CONFLICT 차단): uq_frag_hash_master (key_id IS NULL), uq_frag_hash_per_key (key_id IS NOT NULL, 복합)
+            ├── migration-031-content-hash-per-key.sql  content_hash 전역 UNIQUE 인덱스 폐기 후 partial unique index 2개로 전환 (크로스 테넌트 ON CONFLICT 차단): uq_frag_hash_master (key_id IS NULL), uq_frag_hash_per_key (key_id IS NOT NULL, 복합)
+            ├── migration-032-fragment-claims.sql        Symbolic Memory Layer — fragment_claims 테이블 (v2.8.0)
+            ├── migration-033-symbolic-hard-gate.sql     api_keys.symbolic_hard_gate BOOLEAN DEFAULT false (v2.8.0)
+            ├── migration-034-api-keys-default-mode.sql  api_keys.default_mode TEXT NULL — Mode preset 키 단위 기본값 (v2.9.0)
+            └── migration-035-fragments-affect.sql       fragments.affect TEXT DEFAULT 'neutral' CHECK 제약 6 enum (v2.9.0)
 ```
 
 지원 모듈:
@@ -271,6 +275,7 @@ erDiagram
         text phase "케이스 단계"
         text resolution_status "open / resolved / wont_fix"
         text assertion_status "observed / inferred / verified / rejected"
+        text affect "neutral / frustration / confidence / surprise / doubt / satisfaction"
     }
     fragment_links {
         bigserial id PK
@@ -363,6 +368,7 @@ erDiagram
 | phase | TEXT | | 케이스의 현재 단계 레이블 |
 | resolution_status | TEXT | CHECK | 케이스 해결 상태: open(진행 중) / resolved(해결됨) / wont_fix(미해결 종료) |
 | assertion_status | TEXT | CHECK | 파편 주장 신뢰도: observed(기본, 직접 관측) / inferred(추론) / verified(검증됨) / rejected(기각됨) |
+| affect | TEXT | CHECK, DEFAULT 'neutral' | 기억 당시의 정서 상태 태그. neutral / frustration / confidence / surprise / doubt / satisfaction. migration-035 추가 |
 
 인덱스 목록: content_hash(UNIQUE), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
 
@@ -908,3 +914,127 @@ CHANGELOG.md v2.8.0 Migration Guide 8단계 참조.
 v2.7.0 9260ff2 tenant isolation 수정이 놓친 SessionLinker.wouldCreateCycle 사각지대를 봉인했다. `store.isReachable` 4-arg 시그니처로 확장, 호출부 4곳(`autoLinkSessionFragments`, `ReflectProcessor`, `MemoryManager._autoLinkSessionFragments`, `_wouldCreateCycle`) 전수 전파. 회귀 가드는 `tests/unit/tenant-isolation.test.js`에 6건 신규.
 
 ---
+
+## v2.9.0 신규 컴포넌트
+
+### ModeRegistry
+
+`lib/memory/ModeRegistry.js`. Mode preset JSON을 로드하여 세션별 도구 필터와 skill_guide_override를 적용한다.
+
+- preset 정의 파일: `config/modes/*.json` (recall-only, write-only, onboarding, audit)
+- `X-Memento-Mode` 헤더 또는 `initialize.params.mode`에서 preset 이름을 읽음
+- `api_keys.default_mode` 컬럼(migration-034)으로 키 단위 기본값 설정 가능
+- tools/list 응답을 preset에 따라 필터링하여 허용 도구만 노출
+
+```
+요청 헤더/params.mode
+    │
+    ▼
+ModeRegistry.resolve(mode)
+    │
+    ├── tools/list 필터 (허용 도구 목록 반환)
+    └── get_skill_guide override (onboarding 모드 시 첫 섹션 강제 지정)
+```
+
+### RecallSuggestionEngine
+
+`lib/memory/RecallSuggestionEngine.js`. recall 호출 결과를 분석하여 `_suggestion` 메타 필드를 생성한다.
+
+- SearchEventRecorder가 기록한 search_events 테이블을 재활용
+- fail-open 설계: 엔진 내부 오류 시 `_suggestion: null`로 폴백하여 주 검색 경로에 영향 없음
+- 4개 감지 규칙: `repeat_query`, `empty_result_no_context`, `large_limit_no_budget`, `no_type_filter_noisy`
+- `_suggestion` 객체: `{code, message, recommendedTool, recommendedArgs}` 또는 null
+
+### LocalTransformersEmbedder
+
+`lib/tools/embedding-transformers.js`. `@huggingface/transformers` 라이브러리를 사용하는 로컬 임베딩 생성기.
+
+- `EMBEDDING_PROVIDER=transformers` 환경변수로 활성화
+- 기본 모델: `Xenova/multilingual-e5-small` (384차원, Q8 quantized, ~60MB)
+- 대안 모델: `Xenova/bge-m3` (1024차원, ~280MB, 다국어 고정밀)
+- 싱글톤 파이프라인 캐시: 첫 호출에만 모델을 로드, 이후 재사용
+- 차원 불일치 시 서버 시작 시 `check-embedding-consistency.js`가 자동 검출하여 프로세스 중단
+- OpenAI/Gemini 등 API 기반 provider와 상호 배타. 전환 시 DB 스키마 migration-007 + 임베딩 백필 필수
+
+```
+EMBEDDING_PROVIDER=transformers
+    │
+    ▼
+LocalTransformersEmbedder.generate(text)
+    ├── pipeline('feature-extraction', EMBEDDING_MODEL) — 싱글톤 캐시
+    ├── mean pooling + L2 normalize
+    └── Float32Array → number[] 변환
+```
+
+상세 전환 절차: [docs/embedding-local.md](embedding-local.md)
+
+### LLM Dispatcher — Codex CLI / Copilot CLI (v2.9.0)
+
+기존 gemini-cli / openai / anthropic / ... 체인에 두 provider가 추가되었다.
+
+```
+LLM_PRIMARY=gemini-cli
+    │
+    ▼
+[gemini-cli] → 실패 → [anthropic] → 실패 → [codex-cli] → 실패 → [copilot-cli] → ...
+```
+
+**codex-cli provider** (`lib/llm/providers/codex-cli.js`):
+1. `runCodexCLI(prompt, outputFile)` — `codex exec --full-auto --skip-git-repo-check -o FILE` 실행
+2. 결과 파일 읽기 → JSON 파싱 → 응답 반환
+- 환경변수 `OPENAI_API_KEY` 또는 Codex CLI 자체 설정 파일로 인증
+
+**copilot-cli provider** (`lib/llm/providers/copilot-cli.js`):
+- GitHub Copilot CLI(`gh copilot suggest`)를 래퍼로 호출
+- `extractJsonBlock()` 유틸리티로 응답 말미의 통계/배너 텍스트 제거 후 JSON 추출
+
+**circuit breaker 및 timeout** (`config/memory.js`):
+- `geminiTimeoutMs: 60000` (이전 15000에서 상향). Gemini CLI 대형 프롬프트의 지연 증가 대응
+- circuit breaker 실패 임계(LLM_CB_FAILURE_THRESHOLD=5), OPEN 지속(LLM_CB_OPEN_DURATION_MS=60000)은 기존과 동일
+
+**LLM_PRIMARY 허용값 전체 목록** (v2.9.0):
+`gemini-cli`, `anthropic`, `openai`, `google-gemini-api`, `groq`, `openrouter`, `xai`, `ollama`, `vllm`, `deepseek`, `mistral`, `cohere`, `zai`, `codex-cli`, `copilot-cli`
+
+### 검색 파이프라인 — _suggestion 후처리
+
+검색 파이프라인 최종 단계에 `_suggestion` 주입이 추가되었다.
+
+```
+L1 + L2 + L2.5 + L3
+    │
+    ▼
+RRF 병합 + 복합 랭킹
+    │
+    ▼
+Symbolic hook chain (v2.8.0)
+    │
+    ▼
+RecallSuggestionEngine.analyze()  ← v2.9.0 신규
+    │
+    ├── _suggestion 생성 (감지된 규칙 있을 때)
+    └── null (정상 패턴일 때)
+    │
+    ▼
+응답 반환 (fragments + _suggestion)
+```
+
+### DB 스키마 — v2.9.0 마이그레이션
+
+**migration-034: api_keys.default_mode**
+- `TEXT DEFAULT NULL` 컬럼 추가
+- 허용값: `recall-only`, `write-only`, `onboarding`, `audit`, NULL(제한 없음)
+- Admin console에서 키 편집 시 설정
+
+**migration-035: fragments.affect**
+- `TEXT DEFAULT 'neutral'` 컬럼 추가
+- CHECK 제약: `affect IN ('neutral', 'frustration', 'confidence', 'surprise', 'doubt', 'satisfaction')`
+- remember() 파라미터 `affect`로 저장, recall() 파라미터 `affect`로 필터링
+
+---
+
+## 관련 문서
+
+- [로컬 임베딩 설정](embedding-local.md) — LocalTransformersEmbedder 전환 절차 상세
+- [통합/E2E 테스트](../tests/integration/README.md) — 테스트 환경 구성 및 실행 방법
+- [API Reference](api-reference.md) — MCP 도구 파라미터 및 응답 필드 상세
+- [설정 레퍼런스](configuration.md) — 환경변수 전체 목록 및 LLM provider 설정

@@ -78,6 +78,64 @@ L1 캐시와 Working Memory가 비활성화되지만 핵심 기억 저장/검색
 
 보호된 리소스에 인증 없이 접근하면 `401 Unauthorized`와 함께 `WWW-Authenticate: Bearer resource_metadata="</.well-known/oauth-protected-resource URL>"` 헤더가 반환된다.
 
+### Mode Preset (v2.9.0)
+
+`X-Memento-Mode` 헤더 또는 `initialize` 요청의 `params.mode`로 세션 동작 모드를 지정할 수 있다. admin console에서 `api_keys.default_mode`를 설정하면 키 단위 기본값을 고정할 수 있다.
+
+| Preset | 설명 | 허용 도구 |
+|--------|------|----------|
+| `recall-only` | 읽기 전용 세션. 기억 저장·수정 도구 차단. 검색 전용 에이전트에 사용. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces, get_skill_guide, tool_feedback |
+| `write-only` | 저장 전용 세션. recall, context 차단. 데이터 수집 파이프라인에 사용. | remember, batch_remember, forget, amend, link, reflect |
+| `onboarding` | 신규 사용자 안내 세션. get_skill_guide를 첫 도구로 강제 노출. | 전체 (get_skill_guide 우선 안내) |
+| `audit` | 읽기·추적 전용 세션. 쓰기 도구 전체 차단. 감사·컴플라이언스 목적. | recall, context, memory_stats, graph_explore, fragment_history, reconstruct_history, search_traces |
+
+HTTP 헤더로 설정:
+```
+X-Memento-Mode: recall-only
+```
+
+`initialize` 파라미터로 설정:
+```json
+{
+  "method": "initialize",
+  "params": {
+    "mode": "recall-only",
+    "protocolVersion": "2025-06-18"
+  }
+}
+```
+
+### 세션 재사용 (v2.9.0)
+
+토큰 기반 세션 재사용이 활성화되어 있다. 클라이언트가 `Mcp-Session-Id` 없이 재연결하더라도 동일 Bearer 토큰이면 서버가 기존 세션을 자동으로 복구한다. 클라이언트 측에는 투명하게 동작하며 별도 설정이 필요하지 않다.
+
+### tools/list 응답 — meta 필드 (v2.9.0)
+
+각 도구의 `tools/list` 응답 항목에 `meta` 필드가 추가되었다.
+
+```json
+{
+  "name": "recall",
+  "description": "...",
+  "inputSchema": { ... },
+  "meta": {
+    "capabilities": ["search", "pagination", "caseMode"],
+    "riskLevel": "read",
+    "requiresMaster": false,
+    "beta": false,
+    "idempotent": true
+  }
+}
+```
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `capabilities` | string[] | 도구가 지원하는 기능 태그 목록 |
+| `riskLevel` | string | 도구의 위험 등급. `read` / `write` / `admin` |
+| `requiresMaster` | boolean | master key(MEMENTO_ACCESS_KEY)만 호출 가능 여부 |
+| `beta` | boolean | 실험적 기능 여부. true 시 인터페이스가 변경될 수 있음 |
+| `idempotent` | boolean | 동일 파라미터로 반복 호출해도 부작용이 없는지 여부 |
+
 ---
 
 ## OAuth 2.0
@@ -228,10 +286,35 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | agentId | string | - | 에이전트 ID |
 | minImportance | number | - | 최소 중요도 필터 (0~1). 이 값 이상의 importance를 가진 파편만 반환. |
 | isAnchor | boolean | - | true 시 앵커(고정) 파편만 반환. 핵심 지식 조회에 유용. |
+| affect | string \| string[] | - | 정서 태그 필터. 단일 문자열 또는 배열. 해당 affect 값을 가진 파편만 반환. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
 
 ### 응답 파편 필드 (주요)
 
 각 반환 파편에는 `key_id` 필드가 포함된다. master key 호출 시 타 API 키 소유 파편도 반환될 수 있으며, 이 경우 `key_id` 값으로 소유 키를 식별할 수 있다. API key 호출 시에는 자신이 소유한 파편(`key_id` 일치) 또는 그룹 공유 파편만 반환된다.
+
+`affect` 필드: 해당 파편에 태그된 정서 상태. 저장 시 지정한 값과 동일하게 반환된다.
+
+`_suggestion` (v2.9.0+): RecallSuggestionEngine이 현재 검색 패턴을 분석하여 생성한 힌트 객체. 감지된 문제가 없으면 `null`이다.
+
+```json
+{
+  "_suggestion": {
+    "code": "empty_result_no_context",
+    "message": "결과가 없습니다. contextText 파라미터로 현재 맥락을 전달하면 SpreadingActivation이 관련 파편을 선제 활성화합니다.",
+    "recommendedTool": "recall",
+    "recommendedArgs": { "contextText": "현재 작업 맥락 요약" }
+  }
+}
+```
+
+`_suggestion` 감지 규칙:
+
+| code | 트리거 조건 | 권유 |
+|------|------------|------|
+| `repeat_query` | 동일 키워드/텍스트 쿼리를 30분 이내 3회 이상 반복 | depth 또는 type 필터 추가 |
+| `empty_result_no_context` | 결과 0건이고 contextText가 없는 경우 | contextText 추가 또는 keywords 확장 |
+| `large_limit_no_budget` | pageSize=50 요청이고 tokenBudget 미지정인 경우 | tokenBudget 명시로 응답 크기 제어 |
+| `no_type_filter_noisy` | type 필터 없이 10건 이상 반환되었고 depth도 미지정인 경우 | type 또는 depth 필터 추가 |
 
 `explanation` (v2.8.0+, `MEMENTO_SYMBOLIC_EXPLAIN=true` 시에만 포함): 해당 파편이 검색 결과에 포함된 이유를 최대 3개 reason code로 설명한다.
 
@@ -331,6 +414,17 @@ reason code 목록 (최대 3개):
 | phase | string | - | 작업 단계 (예: planning, debugging, verification) |
 | resolutionStatus | string | - | 작업 해결 상태 (open, resolved, abandoned) |
 | assertionStatus | string | - | 파편의 신뢰도 수준 (observed, inferred, verified, rejected). 기본값: observed |
+| affect | string | - | 기억 당시의 정서 상태 태그. 기본값: neutral. 유효값: neutral, frustration, confidence, surprise, doubt, satisfaction |
+
+`affect` 사용 예:
+```json
+{
+  "content": "Redis 연결 실패 원인이 REDIS_SENTINEL_ENABLED 미설정임을 확인했다.",
+  "topic": "redis",
+  "type": "error",
+  "affect": "frustration"
+}
+```
 
 ### 응답
 
@@ -615,3 +709,12 @@ fragments를 정확 매칭으로 탐색한다 (recall의 시맨틱 검색과 달
 1. 세션 시작 — `context()`로 핵심 기억을 로드한다. 선호, 에러 패턴, 절차가 복원된다. 미반영 세션이 있으면 힌트가 표시된다.
 2. 작업 중 — 중요한 결정, 에러, 절차 발생 시 `remember()`로 저장한다. 저장 시 유사 파편과 자동으로 링크가 생성된다. 과거 경험이 필요하면 `recall()`로 검색한다. 에러 해결 후 `forget()`으로 에러 파편을 정리하고 `remember()`로 해결 절차를 기록한다.
 3. 세션 종료 — `reflect()`로 세션 내용을 구조화된 파편으로 영속화한다. 수동 호출 없이도 세션 종료/만료 시 AutoReflect가 자동으로 실행된다.
+
+---
+
+## 관련 문서
+
+- [로컬 임베딩 설정](embedding-local.md) — `EMBEDDING_PROVIDER=transformers` 전환 절차 상세
+- [통합/E2E 테스트](../tests/integration/README.md) — 테스트 환경 구성 및 실행 방법
+- [아키텍처](architecture.md) — 컴포넌트 의존성 및 검색 파이프라인
+- [설정 레퍼런스](configuration.md) — 전체 환경변수 목록 및 MEMORY_CONFIG

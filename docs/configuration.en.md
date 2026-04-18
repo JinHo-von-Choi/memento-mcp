@@ -90,7 +90,19 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
 
 ##### Supported Providers
 
-gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai
+gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**
+
+**codex-cli**: Executes `codex exec --full-auto --skip-git-repo-check -o FILE`. Authenticates via `OPENAI_API_KEY` or Codex CLI config file. Specify in `LLM_FALLBACKS` as:
+```json
+[{"provider": "codex-cli"}]
+```
+
+**copilot-cli**: Wraps GitHub Copilot CLI (`gh copilot suggest`). Requires `gh` CLI and a Copilot subscription:
+```json
+[{"provider": "copilot-cli"}]
+```
+
+**geminiTimeoutMs**: The `geminiTimeoutMs` value in `config/memory.js` has been raised from 15000ms to **60000ms** to accommodate increased latency from large Gemini CLI prompts.
 
 For detailed operational guidance, see `docs/operations/llm-providers.md`.
 
@@ -155,7 +167,7 @@ POSTGRES_* prefixes take precedence over DB_* prefixes. Both formats can be mixe
 | Variable | Default | Description |
 |----------|---------|-------------|
 | OPENAI_API_KEY | (none) | OpenAI API key. Used when `EMBEDDING_PROVIDER=openai` |
-| EMBEDDING_PROVIDER | openai | Embedding provider. `openai` \| `gemini` \| `ollama` \| `localai` \| `cloudflare` \| `custom` |
+| EMBEDDING_PROVIDER | openai | Embedding provider. `openai` \| `gemini` \| `ollama` \| `localai` \| `cloudflare` \| `custom` \| `transformers` |
 | EMBEDDING_API_KEY | (none) | Generic embedding API key. Falls back to `OPENAI_API_KEY` when unset |
 | EMBEDDING_BASE_URL | (none) | OpenAI-compatible endpoint URL when `EMBEDDING_PROVIDER=custom` |
 | EMBEDDING_MODEL | (provider default) | Embedding model to use. Provider-specific default applied when omitted |
@@ -413,6 +425,35 @@ EMBEDDING_DIMENSIONS=1024
 
 ---
 
+### Local Transformers Embedding (v2.9.0)
+
+> Generates embeddings locally without an API key. Uses the `@huggingface/transformers` library and runs on CPU alone without a GPU.
+
+```env
+EMBEDDING_PROVIDER=transformers
+EMBEDDING_MODEL=Xenova/multilingual-e5-small   # default (384 dimensions, ~60MB)
+# EMBEDDING_MODEL=Xenova/bge-m3                # alternative (1024 dimensions, ~280MB, multilingual high-precision)
+EMBEDDING_DIMENSIONS=384                        # must be specified explicitly when different from the default schema (1536)
+```
+
+**Note**: Mutually exclusive with API-based providers (openai, gemini, etc.). Switching requires a DB schema change; mismatched dimensions from existing embeddings will degrade search precision.
+
+Switching procedure:
+```bash
+# 1. Update schema dimensions (example: 1536 -> 384)
+EMBEDDING_DIMENSIONS=384 DATABASE_URL=$DATABASE_URL \
+  node scripts/migration-007-flexible-embedding-dims.js
+
+# 2. Regenerate embeddings for existing fragments
+DATABASE_URL=$DATABASE_URL node scripts/backfill-embeddings.js
+```
+
+At server startup, `check-embedding-consistency.js` automatically validates that the DB vector dimensions match `EMBEDDING_DIMENSIONS`. A mismatch halts the process to guarantee integrity.
+
+For details, see [docs/embedding-local.md](embedding-local.md).
+
+---
+
 ### Commercial APIs (Custom Adapter Required)
 
 Cohere, Voyage AI, Mistral, Jina AI, and Nomic are either incompatible with the OpenAI SDK or have separate API structures. Replace the `generateEmbedding` function in `lib/tools/embedding.js` with the examples below.
@@ -590,6 +631,7 @@ EMBEDDING_DIMENSIONS=768
 | Cloudflare Workers AI (bge-small) | 384 | `EMBEDDING_PROVIDER=cloudflare` | Yes (10K req/day) |
 | Cloudflare Workers AI (bge-large) | 1024 | `EMBEDDING_PROVIDER=cloudflare` | Yes (10K req/day) |
 | Custom compatible server | Variable | `EMBEDDING_PROVIDER=custom` | -- |
+| HuggingFace Transformers (multilingual-e5-small) | 384 | `EMBEDDING_PROVIDER=transformers` | Fully free (local) |
 | Cohere embed-v4.0 | 1536 | Code replacement | None |
 | Voyage AI voyage-3.5 | 1024 | Code replacement | None |
 | Mistral mistral-embed | 1024 | Code replacement | None |
@@ -633,6 +675,43 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 028 | migration-028-composite-indexes.sql | Composite indexes: (agent_id, topic, created_at DESC) for topic fallback search optimization, (key_id, agent_id, importance DESC) WHERE valid_to IS NULL for API key isolation query optimization. Replaces migration-016's idx_frag_agent_topic |
 | 030 | migration-030-search-param-thresholds-key-text.sql | search_param_thresholds.key_id type INTEGER->TEXT conversion. Fixes bug where SearchParamAdaptor adaptive learning was broken after fragments.key_id changed to TEXT(UUID) in migration-027. Preserves existing sentinel -1 as '-1' string |
 | 031 | migration-031-content-hash-per-key.sql | Drops global UNIQUE index (idx_frag_hash) on content_hash, replaces with 2 partial unique indexes to block cross-tenant ON CONFLICT paths. Master-only (key_id IS NULL) `uq_frag_hash_master`, API key (key_id IS NOT NULL) composite `uq_frag_hash_per_key` |
+| 032 | migration-032-fragment-claims.sql | Symbolic Memory Layer fragment_claims table (v2.8.0) |
+| 033 | migration-033-symbolic-hard-gate.sql | api_keys.symbolic_hard_gate BOOLEAN (v2.8.0) |
+| 034 | migration-034-api-keys-default-mode.sql | api_keys.default_mode TEXT NULL — per-key Mode preset default (v2.9.0) |
+| 035 | migration-035-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum (v2.9.0) |
+
+---
+
+## Mode Preset Configuration (v2.9.0)
+
+Locks the session operation scope to a preset. Three configuration paths are available, applied in the following priority order:
+
+1. **Per-request header** (highest priority): `X-Memento-Mode: <preset>`
+2. **initialize parameter**: `{ "method": "initialize", "params": { "mode": "<preset>" } }`
+3. **Per-key default** (admin console): `api_keys.default_mode` column (migration-034)
+
+| Preset | Description | Key Restrictions |
+|--------|-------------|-----------------|
+| `recall-only` | Read-only. Write tools blocked | remember, forget, amend, reflect unavailable |
+| `write-only` | Write-only. Search tools blocked | recall, context unavailable |
+| `onboarding` | New-user guidance. get_skill_guide surfaced first | No restrictions (guidance emphasized) |
+| `audit` | Audit/compliance. All writes blocked | remember, forget, amend, reflect, link unavailable |
+
+When mode is unset or NULL, only the existing RBAC-based permission system applies.
+
+See also: [API Reference — Mode Preset](api-reference.en.md#mode-preset-v290)
+
+---
+
+## MCP Connection Settings
+
+### Token-Based Session Reuse (v2.9.0)
+
+Even if a client reconnects without `Mcp-Session-Id`, the server automatically recovers the existing session as long as the same Bearer token is presented. Useful when a session ID is lost or when reconnecting after a network interruption.
+
+- Operates transparently on the client side: no additional configuration required
+- On recovery, session context is preserved: keyId, groupKeyIds, workspace, permissions, etc.
+- Valid only within the token TTL (`OAUTH_TOKEN_TTL_SECONDS`)
 
 ---
 
@@ -666,3 +745,12 @@ DATABASE_URL=postgresql://user:pass@host:port/db npm run test:e2e
 ```bash
 npm run test:ci          # npm test + test:e2e
 ```
+
+---
+
+## Related Documents
+
+- [Local Embedding Setup](embedding-local.md) — Detailed switching procedure for `EMBEDDING_PROVIDER=transformers`
+- [Integration/E2E Tests](../tests/integration/README.md) — Test environment setup and execution
+- [API Reference](api-reference.en.md) — MCP tool parameters and Mode preset details
+- [Architecture](architecture.en.md) — New component dependencies and DB schema
