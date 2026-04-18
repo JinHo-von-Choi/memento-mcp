@@ -44,6 +44,9 @@ import { startSchedulers } from "./lib/scheduler.js";
 /** Reranker 사전 로드 */
 import { preloadReranker } from "./lib/memory/Reranker.js";
 
+/** 임베딩 차원 일관성 검증 */
+import { checkEmbeddingConsistency } from "./scripts/check-embedding-consistency.js";
+
 /** OpenAPI */
 import { validateAuthentication } from "./lib/auth.js";
 import { buildSpec }              from "./lib/openapi.js";
@@ -286,9 +289,12 @@ server.listen(PORT, () => {
   /** pgvector 스키마 자동 감지 (PGVECTOR_SCHEMA 미설정 시) */
   const pool = getPrimaryPool();
   if (pool) {
-    detectPgvectorSchema(pool).then(() => {
+    detectPgvectorSchema(pool).then(async () => {
       if (PGVECTOR_SCHEMA) {
         console.log(`pgvector schema auto-detected: ${PGVECTOR_SCHEMA}`);
+      }
+      if (!await checkEmbeddingConsistency()) {
+        process.exit(1);
       }
     }).catch(() => {});
   }
