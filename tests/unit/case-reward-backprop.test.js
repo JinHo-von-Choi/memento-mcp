@@ -35,7 +35,12 @@ describe("CaseRewardBackprop", () => {
     assert.match(sql, /UPDATE.*fragments/i);
     assert.match(sql, /FROM.*fragment_evidence/i);
     assert.match(sql, /importance\s*\+\s*\$2/i);
-    assert.deepStrictEqual(params, ["case-abc", 0.15, true, null]);
+    /**
+     * keyId=null(마스터 키) 경로는 keyFilter를 생략하고 전체 파편을 대상으로 UPDATE한다.
+     * 따라서 파라미터는 [caseId, delta, isPass] 3개만 바인딩된다.
+     * keyId가 지정된 경우만 $4로 포함되며, 해당 경로는 다음 테스트 케이스에서 검증한다.
+     */
+    assert.deepStrictEqual(params, ["case-abc", 0.15, true]);
   });
 
   test("verification_failed: atomic UPDATE delta=-0.10, quality_verified unchanged", async () => {
