@@ -140,13 +140,11 @@ psql $DATABASE_URL -f lib/memory/migration-032-fragment-claims.sql
 psql $DATABASE_URL -f lib/memory/migration-033-symbolic-hard-gate.sql
 
 # v2.9.0: api_keys.default_mode column (mode preset system)
-psql $DATABASE_URL -f lib/memory/migration-034-api-key-mode.sql
+psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql  # api_keys.default_mode + fragments.affect + fragments.idempotency_key (v2.9.0~v2.12.0 single bundle)
 
 # v2.9.0: fragments.affect column + partial index (affective tagging)
-psql $DATABASE_URL -f lib/memory/migration-035-affect.sql
 
 # v2.12.0: fragments.idempotency_key column + two per-tenant partial unique indexes
-psql $DATABASE_URL -f lib/memory/migration-036-fragment-idempotency.sql
 ```
 
 > **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously. (Symlink from the old path `scripts/migration-007-flexible-embedding-dims.js` is retained until v2.13.0.)
@@ -157,7 +155,7 @@ Since v1.8.0, automatic migration is supported. Instead of running each file man
 DATABASE_URL=postgresql://user:pass@host:port/dbname npm run migrate
 ```
 
-> **migration-036 CONCURRENTLY option**: migration-036 runs inside a transaction, so it uses `CREATE UNIQUE INDEX` (not CONCURRENTLY). For large production tables (millions of fragments) where minimizing lock time is critical, run the two statements below manually before `npm run migrate`. The IF NOT EXISTS guard ensures they are safely skipped during automatic execution.
+> **migration-034-v2.16.0-bundle CONCURRENTLY option**: migration-034-v2.16.0-bundle runs inside a transaction, so it uses `CREATE UNIQUE INDEX` (not CONCURRENTLY). For large production tables (millions of fragments) where minimizing lock time is critical, run the two statements below manually before `npm run migrate`. The IF NOT EXISTS guard ensures they are safely skipped during automatic execution.
 >
 > ```sql
 > CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_tenant
@@ -175,7 +173,7 @@ DATABASE_URL=postgresql://user:pass@host:port/dbname npm run migrate
 # 1. Update dependencies
 npm install
 
-# 2. Run migrations (includes migration-036)
+# 2. Run migrations (includes migration-034-v2.16.0-bundle)
 npm run migrate
 
 # 3. Review EMBEDDING_PROVIDER
@@ -190,7 +188,7 @@ npm run migrate
 node server.js
 ```
 
-Verify migration-036 index application:
+Verify migration-034-v2.16.0-bundle index application:
 
 ```sql
 -- In psql

@@ -25,7 +25,7 @@
 - H2 sparse fields: recall 파라미터에 `fields: string[]` 추가. 17개 화이트리스트(id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation). L1/L2/RRF 단계는 전체 필드 유지 후 응답 직전에 필터링.
 - H3 CLI 서브명령별 `--help` / `-h`: 11개 모듈의 `usage` export 추가.
 - H4 CLI `--format table|json|csv`: TTY 환경 자동 감지. `--json`은 `--format json` 별칭. `lib/cli/_format.js` 신설.
-- H5 idempotencyKey: remember / batchRemember 스키마에 `idempotencyKey` 파라미터 추가(maxLength 128). 같은 key_id 범위 내 partial UNIQUE 보장. `FragmentReader.findByIdempotencyKey` 신설. migration-036(tenant partial index + master partial index 2개).
+- H5 idempotencyKey: remember / batchRemember 스키마에 `idempotencyKey` 파라미터 추가(maxLength 128). 같은 key_id 범위 내 partial UNIQUE 보장. `FragmentReader.findByIdempotencyKey` 신설. migration-034-v2.16.0-bundle(tenant partial index + master partial index 2개).
 
 ### Deprecated
 
@@ -69,9 +69,9 @@
 
 ### Added
 
-- **Mode preset 시스템**: recall-only / write-only / onboarding / audit 4개 JSON preset. `X-Memento-Mode` 헤더, `initialize.params.mode`, `api_keys.default_mode` DB 컬럼 3경로로 활성화. tools/list 응답이 mode별로 필터링된다. (`lib/memory/ModeRegistry.js`, `lib/memory/modes/*.json`, migration-034-api-key-mode.sql)
+- **Mode preset 시스템**: recall-only / write-only / onboarding / audit 4개 JSON preset. `X-Memento-Mode` 헤더, `initialize.params.mode`, `api_keys.default_mode` DB 컬럼 3경로로 활성화. tools/list 응답이 mode별로 필터링된다. (`lib/memory/ModeRegistry.js`, `lib/memory/modes/*.json`, migration-034-v2.16.0-bundle.sql)
 - **RecallSuggestionEngine 비침습적 힌트 필드**: recall 응답에 `_suggestion: {code, message, recommendedTool, recommendedArgs}` 메타 필드 첨부. 4개 감지 규칙(repeat_query / empty_result_no_context / large_limit_no_budget / no_type_filter_noisy). 클라이언트가 무시해도 기존 동작 불변. (`lib/memory/RecallSuggestionEngine.js`)
-- **Affective tagging**: fragments.affect 컬럼(neutral / frustration / confidence / surprise / doubt / satisfaction 6 enum). remember / recall 스키마에 affect 파라미터 노출. CHECK 제약 + partial index. (migration-035-affect.sql, FragmentWriter / Reader)
+- **Affective tagging**: fragments.affect 컬럼(neutral / frustration / confidence / surprise / doubt / satisfaction 6 enum). remember / recall 스키마에 affect 파라미터 노출. CHECK 제약 + partial index. (migration-034-v2.16.0-bundle.sql, FragmentWriter / Reader)
 - **Tool 메타 레지스트리**: 16개 도구에 `meta: {capabilities[], riskLevel, requiresMaster, beta, idempotent}` 정적 필드 추가. 도구별 능력 디스커버리를 위한 Node.js 관용 메타데이터 레지스트리. (`lib/tool-registry.js`)
 - **Codex CLI provider**: `LLM_PRIMARY` / `LLM_FALLBACKS`에 `codex-cli` 지정 시 `codex exec --skip-git-repo-check --full-auto -o FILE` 경로로 JSON 출력을 파싱한다. (`lib/codex.js`, `lib/llm/providers/CodexCliProvider.js`)
 - **GitHub Copilot CLI provider**: `copilot-cli` 지정 시 `copilot -p "prompt" --allow-all-tools --output-format text` 호출 + `extractJsonBlock`으로 통계 꼬리를 제거한다. (`lib/copilot.js`, `lib/llm/providers/CopilotCliProvider.js`)
@@ -97,14 +97,14 @@
 ### Upgrade from v2.8.x
 
 1. `npm install` — package.json 의존성 갱신. `@huggingface/transformers` 패키지가 신규 추가된다.
-2. `npm run migrate` — migration-034(api_keys.default_mode ADD COLUMN), migration-035(fragments.affect ADD COLUMN) 실행. 두 마이그레이션 모두 ADD COLUMN이므로 기존 데이터를 변경하지 않는다.
+2. `npm run migrate` — migration-034(api_keys.default_mode ADD COLUMN), migration-034-v2.16.0-bundle(fragments.affect ADD COLUMN) 실행. 두 마이그레이션 모두 ADD COLUMN이므로 기존 데이터를 변경하지 않는다.
 3. `EMBEDDING_PROVIDER` 검토 — 기본값(`openai` 계열)을 유지하면 추가 작업 없음. 로컬 임베딩으로 전환할 경우 `EMBEDDING_PROVIDER=transformers`를 설정하고 기존 OpenAI 임베딩과 혼합하지 않도록 `scripts/backfill-embeddings.js`로 전체 재생성 후 서버를 기동한다.
 4. backfill-embeddings (조건부) — `EMBEDDING_PROVIDER` 를 변경한 경우만 해당. `npm run backfill:embeddings`로 embedding IS NULL 파편을 일괄 처리한다.
 5. 서버 재시작 — 기동 시 `scripts/check-embedding-consistency.js`가 DB 차원과 설정 차원의 일치를 자동 검증하며, 불일치 시 즉시 기동을 중단하고 오류를 출력한다.
 
 ### Breaking Changes
 
-없음. 모든 신규 기능은 opt-in이다. Mode preset / affect / 로컬 임베딩은 기본값을 유지하면 기존 동작이 완전히 보존된다. migration-034(api_keys.default_mode), migration-035(fragments.affect)는 ADD COLUMN이므로 기존 데이터에 영향 없다.
+없음. 모든 신규 기능은 opt-in이다. Mode preset / affect / 로컬 임베딩은 기본값을 유지하면 기존 동작이 완전히 보존된다. migration-034(api_keys.default_mode), migration-034-v2.16.0-bundle(fragments.affect)는 ADD COLUMN이므로 기존 데이터에 영향 없다.
 
 ## [2.8.7] - 2026-04-17
 

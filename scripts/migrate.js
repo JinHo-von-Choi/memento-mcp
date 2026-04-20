@@ -14,12 +14,12 @@
  *
  * 트랜잭션 제약:
  *   각 migration 파일은 BEGIN/COMMIT 래퍼로 감싸 원자적으로 실행된다.
- *   따라서 migration-036처럼 CREATE UNIQUE INDEX를 포함하는 파일은 트랜잭션 내에서 실행되며,
+ *   따라서 migration-034-v2.16.0-bundle처럼 CREATE UNIQUE INDEX를 포함하는 파일은 트랜잭션 내에서 실행되며,
  *   CREATE INDEX CONCURRENTLY는 사용할 수 없다.
  *   수백만 건 이상의 대규모 테이블에서 잠금 최소화가 필요하다면,
  *   npm run migrate 실행 전에 해당 인덱스를 CONCURRENTLY 옵션으로 수동 실행한다.
  *   IF NOT EXISTS 가드로 인해 수동 적용 후 자동 실행 시 SKIP된다.
- *   상세 가이드: docs/INSTALL.md "migration-036 CONCURRENTLY 옵션" 섹션 참조.
+ *   상세 가이드: docs/INSTALL.md "migration-034-v2.16.0-bundle CONCURRENTLY 옵션" 섹션 참조.
  */
 import fs   from "node:fs";
 import path from "node:path";

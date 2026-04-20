@@ -1,5 +1,5 @@
 /**
- * Affective tagging 단위 테스트 (migration-035)
+ * Affective tagging 단위 테스트 (migration-034-v2.16.0-bundle)
  *
  * 작성자: 최진호
  * 작성일: 2026-04-18

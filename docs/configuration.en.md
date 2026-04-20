@@ -694,7 +694,7 @@ Run `npm run migrate` to execute unapplied migrations in order. History is manag
 | 032 | migration-032-fragment-claims.sql | Symbolic Memory Layer fragment_claims table (v2.8.0) |
 | 033 | migration-033-symbolic-hard-gate.sql | api_keys.symbolic_hard_gate BOOLEAN (v2.8.0) |
 | 034 | migration-034-api-keys-default-mode.sql | api_keys.default_mode TEXT NULL — per-key Mode preset default (v2.9.0) |
-| 035 | migration-035-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum (v2.9.0) |
+| 035 | migration-034-v2.16.0-bundle-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum (v2.9.0) |
 
 ---
 

@@ -107,8 +107,8 @@ server.js  (HTTP 서버)
             ├── migration-032-fragment-claims.sql        Symbolic Memory Layer — fragment_claims 테이블 (v2.8.0)
             ├── migration-033-symbolic-hard-gate.sql     api_keys.symbolic_hard_gate BOOLEAN DEFAULT false (v2.8.0)
             ├── migration-034-api-keys-default-mode.sql  api_keys.default_mode TEXT NULL — Mode preset 키 단위 기본값 (v2.9.0)
-            ├── migration-035-fragments-affect.sql       fragments.affect TEXT DEFAULT 'neutral' CHECK 제약 6 enum (v2.9.0)
-            └── migration-036-idempotency-key.sql        fragments.idempotency_key TEXT NULL + partial UNIQUE 2종: (key_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NOT NULL / (idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NULL (v2.11.0)
+            ├── migration-034-v2.16.0-bundle-fragments-affect.sql       fragments.affect TEXT DEFAULT 'neutral' CHECK 제약 6 enum (v2.9.0)
+            └── migration-034-v2.16.0-bundle-idempotency-key.sql        fragments.idempotency_key TEXT NULL + partial UNIQUE 2종: (key_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NOT NULL / (idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NULL (v2.11.0)
 ```
 
 지원 모듈:
@@ -240,7 +240,7 @@ Object.defineProperty(this, 'store', {
 
 ---
 
-## Idempotency (v2.11.0, migration-036)
+## Idempotency (v2.11.0, migration-034-v2.16.0-bundle)
 
 `fragments` 테이블에 `idempotency_key TEXT NULL` 컬럼이 추가되고 partial UNIQUE 인덱스 2종이 생성되었다.
 
@@ -446,7 +446,7 @@ erDiagram
 | phase | TEXT | | 케이스의 현재 단계 레이블 |
 | resolution_status | TEXT | CHECK | 케이스 해결 상태: open(진행 중) / resolved(해결됨) / wont_fix(미해결 종료) |
 | assertion_status | TEXT | CHECK | 파편 주장 신뢰도: observed(기본, 직접 관측) / inferred(추론) / verified(검증됨) / rejected(기각됨) |
-| affect | TEXT | CHECK, DEFAULT 'neutral' | 기억 당시의 정서 상태 태그. neutral / frustration / confidence / surprise / doubt / satisfaction. migration-035 추가 |
+| affect | TEXT | CHECK, DEFAULT 'neutral' | 기억 당시의 정서 상태 태그. neutral / frustration / confidence / surprise / doubt / satisfaction. migration-034-v2.16.0-bundle 추가 |
 
 인덱스 목록: content_hash(UNIQUE), topic(B-tree), type(B-tree), keywords(GIN), importance DESC(B-tree), created_at DESC(B-tree), agent_id(B-tree), linked_to(GIN), (ttl_tier, created_at)(B-tree), source(B-tree), verified_at(B-tree), is_anchor WHERE TRUE(부분 인덱스), valid_from(B-tree), (topic, type) WHERE valid_to IS NULL(부분 인덱스), id WHERE valid_to IS NULL(부분 UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (복합 부분 인덱스 — API 키 + workspace 동시 필터 최적화), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (workspace 단독 전체 조회용 부분 인덱스).
 
@@ -1103,7 +1103,7 @@ RecallSuggestionEngine.analyze()  ← v2.9.0 신규
 - 허용값: `recall-only`, `write-only`, `onboarding`, `audit`, NULL(제한 없음)
 - Admin console에서 키 편집 시 설정
 
-**migration-035: fragments.affect**
+**migration-034-v2.16.0-bundle: fragments.affect**
 - `TEXT DEFAULT 'neutral'` 컬럼 추가
 - CHECK 제약: `affect IN ('neutral', 'frustration', 'confidence', 'surprise', 'doubt', 'satisfaction')`
 - remember() 파라미터 `affect`로 저장, recall() 파라미터 `affect`로 필터링

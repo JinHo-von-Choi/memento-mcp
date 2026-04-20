@@ -166,16 +166,16 @@ git pull
 npm install
 ```
 
-## 10. migration-036 적용 실패 (CONCURRENTLY 에러)
+## 10. migration-034-v2.16.0-bundle 적용 실패 (CONCURRENTLY 에러)
 
 문제:
-`npm run migrate` 실행 시 migration-036 단계에서 에러 발생.
+`npm run migrate` 실행 시 migration-034-v2.16.0-bundle 단계에서 에러 발생.
 
 원인:
 `CREATE INDEX CONCURRENTLY`는 트랜잭션 블록 안에서 실행할 수 없다. 마이그레이션 스크립트가 트랜잭션을 사용하는 환경에서 CONCURRENTLY 구문이 실패한다.
 
 해결 방법:
-트랜잭션 외부에서 수동으로 인덱스를 생성한 뒤 migration-036을 완료로 표시한다.
+트랜잭션 외부에서 수동으로 인덱스를 생성한 뒤 migration-034-v2.16.0-bundle을 완료로 표시한다.
 
 ```sql
 -- 반드시 BEGIN/COMMIT 없이 독립 실행

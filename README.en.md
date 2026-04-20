@@ -190,7 +190,7 @@ H group: _meta wrapper, sparse fields, CLI improvements, and idempotency.
 - sparse fields: Pass a `fields` array to recall to restrict the returned fields. Whitelist of 17: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation.
 - CLI `--format`: `--format table|json|csv` flag controls output format. Defaults to table in TTY environments and json when piped. `--json` is an alias for `--format json`.
 - CLI `--help`: All 11 subcommands support `--help` / `-h`.
-- idempotencyKey: remember / batchRemember accept an `idempotencyKey` parameter (max 128 chars) to prevent duplicate storage within the same key_id scope. migration-036 adds the `fragments.idempotency_key` column.
+- idempotencyKey: remember / batchRemember accept an `idempotencyKey` parameter (max 128 chars) to prevent duplicate storage within the same key_id scope. migration-034-v2.16.0-bundle adds the `fragments.idempotency_key` column.
 
 _meta structure example:
 

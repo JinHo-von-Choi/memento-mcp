@@ -2,7 +2,7 @@
 
 작성자: 최진호
 작성일: 2026-04-19
-수정일: 2026-04-20 (v2.12.0 migration-036 체크리스트, X-RateLimit 모니터링, scripts 테이블 추가, v2.16.0 메트릭 모니터링 섹션 추가)
+수정일: 2026-04-20 (v2.12.0 migration-034-v2.16.0-bundle 체크리스트, X-RateLimit 모니터링, scripts 테이블 추가, v2.16.0 메트릭 모니터링 섹션 추가)
 
 운영 중 필요에 따라 실행하는 유지보수 스크립트 목록이다. 각 스크립트의 목적, 선행 조건, 실행 명령, 권장 빈도를 기술한다.
 
@@ -72,13 +72,13 @@ Prometheus `/metrics` 원본 수집 설정은 nerdvana-grafana가 담당하며 v
 
 ---
 
-## migration-036 적용 체크리스트 (v2.12.0)
+## migration-034-v2.16.0-bundle 적용 체크리스트 (v2.12.0)
 
-migration-036은 `fragments.idempotency_key` 컬럼과 테넌트별 partial unique index 2개를 추가한다.
+migration-034-v2.16.0-bundle은 `fragments.idempotency_key` 컬럼과 테넌트별 partial unique index 2개를 추가한다.
 
 ### 기본: 자동 실행
 
-`npm run migrate`가 `migration-036-fragment-idempotency.sql`을 번호 순으로 자동 탐지하여 실행한다. `agent_memory.schema_migrations`에 적용 이력이 기록된다.
+`npm run migrate`가 `migration-034-v2.16.0-bundle.sql`을 번호 순으로 자동 탐지하여 실행한다. `agent_memory.schema_migrations`에 적용 이력이 기록된다.
 
 ```bash
 DATABASE_URL=postgresql://... npm run migrate

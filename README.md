@@ -190,7 +190,7 @@ H 그룹: _meta 래퍼, sparse fields, CLI 개선, idempotency.
 - sparse fields: recall 호출 시 `fields` 배열로 반환 필드를 제한할 수 있다. 화이트리스트 17개: id / content / type / topic / keywords / importance / created_at / access_count / confidence / linked / explanations / workspace / context_summary / case_id / valid_to / affect / ema_activation.
 - CLI `--format`: `--format table|json|csv` 플래그로 출력 형식을 선택한다. TTY 환경에서는 기본 table, 파이프 환경에서는 자동으로 json. `--json`은 `--format json` 별칭.
 - CLI `--help`: 11개 서브명령 각각에 `--help` / `-h` 플래그 지원.
-- idempotencyKey: remember / batchRemember에 `idempotencyKey` 파라미터 추가. 같은 key_id 범위 내 중복 저장을 방지하며 최대 128자. migration-036으로 `fragments.idempotency_key` 컬럼 추가.
+- idempotencyKey: remember / batchRemember에 `idempotencyKey` 파라미터 추가. 같은 key_id 범위 내 중복 저장을 방지하며 최대 128자. migration-034-v2.16.0-bundle으로 `fragments.idempotency_key` 컬럼 추가.
 
 _meta 래퍼 구조 예시:
 

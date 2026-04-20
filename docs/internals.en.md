@@ -558,7 +558,7 @@ The `repeat_query` rule queries the `search_events` table for events in the past
 
 ## Affective Tagging Internals (v2.9.0)
 
-`fragments.affect` column (migration-035). Allowed enum: `neutral | frustration | confidence | surprise | doubt | satisfaction`. Default: `neutral`.
+`fragments.affect` column (migration-034-v2.16.0-bundle). Allowed enum: `neutral | frustration | confidence | surprise | doubt | satisfaction`. Default: `neutral`.
 
 - **Write path**: `FragmentWriter` calls `sanitizeAffect(value)` to coerce any value outside the allowed enum to `neutral` before INSERT/UPDATE.
 - **Search filter**: `FragmentReader` search methods accept an `affect` parameter. A single string applies `= $N`; an array applies `= ANY($N::text[])`.

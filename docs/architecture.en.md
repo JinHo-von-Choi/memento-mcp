@@ -104,8 +104,8 @@ server.js  (HTTP server)
             +-- migration-032-fragment-claims.sql        Symbolic Memory Layer -- fragment_claims table (v2.8.0)
             +-- migration-033-symbolic-hard-gate.sql     api_keys.symbolic_hard_gate BOOLEAN DEFAULT false (v2.8.0)
             +-- migration-034-api-keys-default-mode.sql  api_keys.default_mode TEXT NULL -- per-key Mode preset default (v2.9.0)
-            +-- migration-035-fragments-affect.sql       fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum constraint (v2.9.0)
-            +-- migration-036-idempotency-key.sql        fragments.idempotency_key TEXT NULL + 2 partial UNIQUE indexes: (key_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NOT NULL / (idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NULL (v2.11.0)
+            +-- migration-034-v2.16.0-bundle-fragments-affect.sql       fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum constraint (v2.9.0)
+            +-- migration-034-v2.16.0-bundle-idempotency-key.sql        fragments.idempotency_key TEXT NULL + 2 partial UNIQUE indexes: (key_id, idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NOT NULL / (idempotency_key) WHERE idempotency_key IS NOT NULL AND key_id IS NULL (v2.11.0)
 ```
 
 Supporting modules:
@@ -237,7 +237,7 @@ A single `mm.store = stubStore` test mock replacement propagates automatically t
 
 ---
 
-## Idempotency (v2.11.0, migration-036)
+## Idempotency (v2.11.0, migration-034-v2.16.0-bundle)
 
 A `idempotency_key TEXT NULL` column was added to the `fragments` table with 2 partial UNIQUE indexes.
 
@@ -443,7 +443,7 @@ The store for all fragments. This is the core table of the system.
 | phase | TEXT | | Case current phase label |
 | resolution_status | TEXT | CHECK | Case resolution status: open (in progress) / resolved (completed) / wont_fix (closed without resolution) |
 | assertion_status | TEXT | CHECK | Fragment assertion confidence: observed (default, directly witnessed) / inferred (derived) / verified (confirmed) / rejected (dismissed) |
-| affect | TEXT | CHECK, DEFAULT 'neutral' | Emotional state tag at memory storage time. neutral / frustration / confidence / surprise / doubt / satisfaction. Added in migration-035 |
+| affect | TEXT | CHECK, DEFAULT 'neutral' | Emotional state tag at memory storage time. neutral / frustration / confidence / surprise / doubt / satisfaction. Added in migration-034-v2.16.0-bundle |
 
 Index list: content_hash (UNIQUE), topic (B-tree), type (B-tree), keywords (GIN), importance DESC (B-tree), created_at DESC (B-tree), agent_id (B-tree), linked_to (GIN), (ttl_tier, created_at) (B-tree), source (B-tree), verified_at (B-tree), is_anchor WHERE TRUE (partial index), valid_from (B-tree), (topic, type) WHERE valid_to IS NULL (partial index), id WHERE valid_to IS NULL (partial UNIQUE). `idx_fragments_key_workspace` (key_id, workspace) WHERE valid_to IS NULL (composite partial index — optimizes simultaneous key + workspace filtering), `idx_fragments_workspace` (workspace) WHERE workspace IS NOT NULL AND valid_to IS NULL (partial index for workspace-only full scans).
 
@@ -1100,7 +1100,7 @@ Response returned (fragments + _suggestion)
 - Allowed values: `recall-only`, `write-only`, `onboarding`, `audit`, NULL (unrestricted)
 - Set via the key editor in the admin console
 
-**migration-035: fragments.affect**
+**migration-034-v2.16.0-bundle: fragments.affect**
 - Adds `TEXT DEFAULT 'neutral'` column
 - CHECK constraint: `affect IN ('neutral', 'frustration', 'confidence', 'surprise', 'doubt', 'satisfaction')`
 - Stored via the `affect` parameter in remember(), filtered via the `affect` parameter in recall()

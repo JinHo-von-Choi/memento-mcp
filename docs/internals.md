@@ -646,7 +646,7 @@ initialize 이후 모든 요청에서 `MCP-Protocol-Version` 헤더를 검사한
 
 ## Affective Tagging 내부 동작 (v2.9.0)
 
-`fragments.affect` 컬럼 (migration-035). 허용 enum: `neutral | frustration | confidence | surprise | doubt | satisfaction`. 기본값 `neutral`.
+`fragments.affect` 컬럼 (migration-034-v2.16.0-bundle). 허용 enum: `neutral | frustration | confidence | surprise | doubt | satisfaction`. 기본값 `neutral`.
 
 - **저장 경로**: `FragmentWriter`에서 `sanitizeAffect(value)`로 허용 enum 외 값을 `neutral`로 강제 치환한 후 INSERT/UPDATE.
 - **검색 필터**: `FragmentReader`의 `search*` 메서드들이 `affect` 파라미터를 수신한다. 단일 string이면 `= $N` 조건, 배열이면 `= ANY($N::text[])` 조건을 적용한다.

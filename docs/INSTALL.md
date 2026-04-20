@@ -80,14 +80,12 @@ psql $DATABASE_URL -f lib/memory/migration-030-search-param-thresholds-key-text.
 psql $DATABASE_URL -f lib/memory/migration-031-content-hash-per-key.sql                  # content_hash 전역 UNIQUE → 테넌트별 partial unique index (v2.7.0)
 psql $DATABASE_URL -f lib/memory/migration-032-fragment-claims.sql                       # fragment_claims 테이블 + tenant 격리 partial unique (v2.8.0 Symbolic Memory Phase 0)
 psql $DATABASE_URL -f lib/memory/migration-033-symbolic-hard-gate.sql                    # api_keys.symbolic_hard_gate 컬럼 (v2.8.0 symbolic hard gate opt-in)
-psql $DATABASE_URL -f lib/memory/migration-034-api-key-mode.sql                          # api_keys.default_mode 컬럼 (v2.9.0 mode preset)
-psql $DATABASE_URL -f lib/memory/migration-035-affect.sql                                # fragments.affect 컬럼 + partial index (v2.9.0 affective tagging)
-psql $DATABASE_URL -f lib/memory/migration-036-fragment-idempotency.sql                  # fragments.idempotency_key 컬럼 + 테넌트별 partial unique index 2개 (v2.12.0)
+psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql                        # api_keys.default_mode + fragments.affect + fragments.idempotency_key (v2.9.0~v2.12.0 단일 번들)
 ```
 
 > **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다. (v2.13.0까지 구 경로 `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크 유지)
 
-> **migration-036 CONCURRENTLY 옵션**: migration-036은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
+> **migration-034-v2.16.0 CONCURRENTLY 옵션**: migration-034-v2.16.0-bundle은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
 >
 > ```sql
 > CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_fragments_idempotency_tenant
@@ -113,7 +111,7 @@ DATABASE_URL=postgresql://user:pass@host:port/dbname npm run migrate
 # 1. 의존성 업데이트
 npm install
 
-# 2. 마이그레이션 실행 (migration-036 포함)
+# 2. 마이그레이션 실행 (migration-034-v2.16.0-bundle 포함)
 npm run migrate
 
 # 3. EMBEDDING_PROVIDER 재검토
@@ -128,7 +126,7 @@ npm run migrate
 node server.js
 ```
 
-migration-036 인덱스 적용 확인:
+migration-034-v2.16.0-bundle 인덱스 적용 확인:
 
 ```sql
 -- psql 접속 후

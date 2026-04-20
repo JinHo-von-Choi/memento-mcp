@@ -693,7 +693,7 @@ EMBEDDING_DIMENSIONS=768
 | 032 | migration-032-fragment-claims.sql | Symbolic Memory Layer fragment_claims 테이블 (v2.8.0) |
 | 033 | migration-033-symbolic-hard-gate.sql | api_keys.symbolic_hard_gate BOOLEAN (v2.8.0) |
 | 034 | migration-034-api-keys-default-mode.sql | api_keys.default_mode TEXT NULL — Mode preset 키 단위 기본값 (v2.9.0) |
-| 035 | migration-035-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum (v2.9.0) |
+| 035 | migration-034-v2.16.0-bundle-fragments-affect.sql | fragments.affect TEXT DEFAULT 'neutral' CHECK 6-enum (v2.9.0) |
 
 ---
 
