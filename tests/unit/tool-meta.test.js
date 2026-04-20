@@ -15,7 +15,7 @@ import { describe, it } from "node:test";
 import assert            from "node:assert/strict";
 import { TOOL_REGISTRY } from "../../lib/tool-registry.js";
 
-const VALID_CAPABILITIES = new Set(["memory:read", "memory:write", "memory:destructive", "analytics:read", "admin"]);
+const VALID_CAPABILITIES = new Set(["memory:read", "memory:write", "memory:destructive", "analytics:read", "admin", "session:write"]);
 const VALID_RISK_LEVELS  = new Set(["safe", "caution", "destructive"]);
 
 describe("TOOL_REGISTRY — meta 필드 존재 검증", () => {

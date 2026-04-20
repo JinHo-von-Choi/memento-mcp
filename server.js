@@ -65,6 +65,7 @@ import {
   handleOAuthAuthorize,
   handleOAuthToken,
   handleOAuthRegister,
+  handleSessionRotate,
   handleAdminUi,
   handleAdminImage,
   handleAdminStatic,
@@ -206,6 +207,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     await handleOAuthRegister(req, res);
+    return;
+  }
+
+  /* POST /session/rotate — 세션 교체 (Phase 1 security-hardening) */
+  if (req.method === "POST" && url.pathname === "/session/rotate") {
+    await handleSessionRotate(req, res);
     return;
   }
 

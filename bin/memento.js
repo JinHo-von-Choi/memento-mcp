@@ -16,6 +16,7 @@ const COMMANDS = {
   export:     () => import('../lib/cli/export.js'),
   import:     () => import('../lib/cli/import.js'),
   completion: () => import('../lib/cli/completion.js'),
+  session:    () => import('../lib/cli/session.js'),
 };
 
 /** 원격 모드를 지원하지 않는 로컬 전용 명령 목록 */
@@ -39,6 +40,7 @@ function printUsage() {
     '  export [--topic x] [--type t]   Export fragments as JSONL to stdout or file',
     '  import [--input FILE]            Import fragments from JSONL file or stdin',
     '  completion <shell>               Print shell completion script (bash|zsh)',
+    '  session <list|show|delete>       Manage active sessions (headless/CI)',
     '',
     'Options:',
     '  --help                      Show this help message',
@@ -47,7 +49,7 @@ function printUsage() {
     '  --key <KEY>                 API 키 Bearer 토큰 (--remote 사용 시 필수)',
     '  --timeout <ms>              원격 요청 타임아웃 밀리초 (default: 30000)',
     '',
-    'Remote-capable commands: recall, remember, stats, inspect',
+    'Remote-capable commands: recall, remember, stats, inspect, session',
     'Local-only commands: serve, migrate, cleanup, backfill, health, update, export, import',
   ];
   console.log(lines.join('\n'));
