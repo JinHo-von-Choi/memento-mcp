@@ -470,6 +470,66 @@ body {
 }
 
 
+/* ── Metrics Dashboard ────────────────────────────────── */
+.metrics-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 0;
+}
+
+@media (max-width: 1280px) {
+  .metrics-card-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .metrics-card-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.metrics-card {
+  position: relative;
+  overflow: hidden;
+  padding: 1.25rem 1.25rem 1.25rem 1.5rem;
+}
+
+.metrics-card__bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: rgba(0, 210, 255, 0.5); /* default: primary tone */
+  transition: background 0.3s;
+}
+
+.metrics-card--warn .metrics-card__bar {
+  background: #f4b942;
+}
+
+.metrics-card--warn .metrics-card__value {
+  color: #f4b942;
+}
+
+.metrics-card--critical .metrics-card__bar {
+  background: #ffb4ab;
+}
+
+.metrics-card--critical .metrics-card__value {
+  color: #ffb4ab;
+}
+
+.metrics-table th {
+  user-select: none;
+}
+
+.metrics-table th:hover {
+  color: #a5e7ff;
+}
+
 /* ── Responsive ───────────────────────────────────────── */
 @media (max-width: 1024px) {
   .split-inspector {

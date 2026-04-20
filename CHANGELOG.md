@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased] v2.16.0
+
+### Added
+
+- Admin Console: 메트릭 메뉴 추가 — Prometheus 8 카드(Active Sessions / Auth Denied / RBAC Denied / Tenant Blocked / RPC p50/p99 / Tool Errors / Symbolic Gate Blocked / OAuth Tokens) + 도구별 호출 통계 테이블 + 에러 타입별 분포 테이블. Admin UI 좌측 사이드바 메뉴 7개 → 8개.
+- `/v1/internal/model/nothing/metrics-summary` 엔드포인트 (master/admin 전용): prom-client Registry에서 직접 산출, 응답 캐시 TTL 10초, `?windowSec=N` 파라미터 지원.
+
+---
+
 ## [2.12.0] - 2026-04-20
 
 ### Added

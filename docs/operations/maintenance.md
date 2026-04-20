@@ -2,9 +2,73 @@
 
 작성자: 최진호
 작성일: 2026-04-19
-수정일: 2026-04-20 (v2.12.0 migration-036 체크리스트, X-RateLimit 모니터링, scripts 테이블 추가)
+수정일: 2026-04-20 (v2.12.0 migration-036 체크리스트, X-RateLimit 모니터링, scripts 테이블 추가, v2.16.0 메트릭 모니터링 섹션 추가)
 
 운영 중 필요에 따라 실행하는 유지보수 스크립트 목록이다. 각 스크립트의 목적, 선행 조건, 실행 명령, 권장 빈도를 기술한다.
+
+---
+
+## 메트릭 모니터링 (v2.16.0)
+
+서버 건전성 지표를 확인하는 두 가지 경로다. 목적에 따라 선택한다.
+
+| 항목 | Admin /metrics-summary | Grafana |
+|-|-|-|
+| 목적 | 즉각 진단 (at-a-glance) | 심층 분석, 시계열 추이 |
+| 접근 방법 | Admin UI 메트릭 메뉴 또는 REST API | https://grafana.nerdvana.kr |
+| 데이터 소스 | prom-client in-memory Registry | Prometheus scrape (15s 간격) |
+| 응답 캐시 | 10초 | Prometheus 보관 주기 |
+| 폴링 주기 | Admin UI 자동 30초 | 대시보드 설정에 따름 |
+| DB/Redis 의존 | 없음 | Prometheus 서버 필요 |
+| 장기 보관 | 없음 (재시작 시 초기화) | Prometheus TSDB 보관 |
+
+### Admin /metrics-summary 경로
+
+엔드포인트: `GET /v1/internal/model/nothing/metrics-summary`
+
+인증: `Authorization: Bearer <MEMENTO_ACCESS_KEY>` (master 키 전용)
+
+응답 구조:
+
+```json
+{
+  "cards": {
+    "activeSessions": 12,
+    "authDeniedRate5m": 0.5,
+    "rbacDeniedRate5m": 0.0,
+    "tenantBlockedTotal": 3,
+    "rpcLatencyP50": 45,
+    "rpcLatencyP99": 230,
+    "toolErrorRate5m": 0.2,
+    "symbolicGateBlocked": 0,
+    "oauthTokensIssuedRate1h": 8
+  },
+  "tools": [
+    { "tool": "remember", "total_calls": 1024, "success_rate": 0.998, "p95_ms": 35 }
+  ],
+  "errors": [
+    { "error_type": "rpc_invalid_params", "count": 5, "last_seen": "2026-04-20T15:00:00Z" }
+  ],
+  "generated_at": "2026-04-20T16:00:00Z",
+  "window_sec": 60
+}
+```
+
+rate 값(authDeniedRate5m, toolErrorRate5m 등)은 서버 메모리의 직전 snapshot과 현재 Counter 값의 delta를 windowSec으로 나눈 값이다. 서버 재시작 시 첫 번째 응답의 rate는 0이다.
+
+`?windowSec=N` 쿼리 파라미터로 rate 계산 윈도우를 조정한다 (기본 60초, 최솟값 5초).
+
+### Grafana 경로
+
+설정 파일 위치:
+
+- Prometheus scrape 대상: `/home/nirna/job/mcp/docs-mcp/monitoring/prometheus.yml`
+- 알림 규칙: `/home/nirna/job/mcp/docs-mcp/monitoring/alerts.yml`
+- 대시보드 JSON: `/home/nirna/job/mcp/docs-mcp/monitoring/grafana/dashboards/json/`
+
+memento-mcp 서버의 `/metrics` 엔드포인트를 scrape한다 (인증 필요, scrape_interval 15초).
+
+Prometheus `/metrics` 원본 수집 설정은 nerdvana-grafana가 담당하며 v2.16.0 변경 없음.
 
 ---
 
