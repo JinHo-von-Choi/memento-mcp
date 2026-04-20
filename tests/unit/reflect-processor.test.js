@@ -9,10 +9,24 @@
  * 세션 통합, episode 생성을 검증한다.
  */
 
-import { describe, it, mock, beforeEach } from "node:test";
+import { describe, it, mock, beforeEach, after } from "node:test";
 import assert from "node:assert/strict";
 
 import { ReflectProcessor } from "../../lib/memory/ReflectProcessor.js";
+import { redisClient }      from "../../lib/redis.js";
+
+/**
+ * ReflectProcessor import 체인이 Redis ioredis 클라이언트를 즉시 연결하므로
+ * 테스트 종료 후 명시적으로 quit하지 않으면 event loop가 유지되어
+ * node:test가 "Promise resolution is still pending" 메시지와 함께 cleanup hang.
+ */
+after(async () => {
+  try { await redisClient.quit(); } catch (_) {}
+  try {
+    const { getPrimaryPool } = await import("../../lib/tools/db.js");
+    await getPrimaryPool()?.end();
+  } catch (_) {}
+});
 
 /* ── mock 의존성 생성 헬퍼 ── */
 let idCounter;
