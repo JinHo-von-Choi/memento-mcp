@@ -5,7 +5,7 @@
 
 ## 개요
 
-memento-mcp는 내부 LLM 호출(AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)에 13개 provider fallback chain을 지원한다. 기본값은 Gemini CLI 단독 사용으로 기존 동작 완전 보존.
+memento-mcp는 내부 LLM 호출(AutoReflect, MorphemeIndex, ConsolidatorGC, ContradictionDetector, MemoryEvaluator)에 15개 provider fallback chain을 지원한다. 기본값은 Gemini CLI 단독 사용으로 기존 동작 완전 보존.
 
 ## 활성화
 
@@ -23,18 +23,21 @@ Gemini CLI만 사용. 실패 시 caller가 graceful degradation (AutoReflect ski
 ```bash
 LLM_PRIMARY=gemini-cli
 LLM_FALLBACKS='[
+  {"provider":"codex-cli","model":"gpt-5.3-codex-spark","timeoutMs":120000},
   {"provider":"anthropic","apiKey":"sk-ant-...","model":"claude-opus-4-6"},
   {"provider":"openai","apiKey":"sk-...","model":"gpt-4o-mini"}
 ]'
 ```
 
-Gemini CLI 실패 시 anthropic → openai 순차 시도.
+Gemini CLI 실패 시 codex-cli → anthropic → openai 순차 시도.
 
 ## Provider별 필수 필드
 
 | Provider | apiKey | model | baseUrl | 기본 baseUrl |
 |----------|--------|-------|---------|-------------|
 | gemini-cli | - | - | - | (CLI 바이너리) |
+| codex-cli | - | 선택 | - | (CLI 바이너리 + Codex 인증) |
+| copilot-cli | - | - | - | (CLI 바이너리 + GitHub Copilot 인증) |
 | anthropic | 필수 | 필수 | 선택 | https://api.anthropic.com/v1 |
 | openai | 필수 | 필수 | 선택 | https://api.openai.com/v1 |
 | google-gemini-api | 필수 | 필수 | 선택 | https://generativelanguage.googleapis.com/v1beta |

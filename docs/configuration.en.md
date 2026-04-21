@@ -72,7 +72,7 @@ The `api_keys.symbolic_hard_gate` column (migration-033) enables per-key hard ga
 
 #### LLM Provider Fallback Chain (v2.8.0)
 
-Automatic fallback to 12 providers beyond Gemini CLI. Existing behavior is fully preserved with default settings.
+Automatic fallback to 14 providers beyond Gemini CLI. Existing behavior is fully preserved with default settings.
 
 ##### Basic Configuration
 
@@ -103,9 +103,9 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
 
 gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**
 
-**codex-cli**: Executes `codex exec --full-auto --skip-git-repo-check -o FILE`. Authenticates via `OPENAI_API_KEY` or Codex CLI config file. Specify in `LLM_FALLBACKS` as:
+**codex-cli**: Executes `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`. Authenticates via `OPENAI_API_KEY` or the Codex CLI config file. Specify in `LLM_FALLBACKS` as:
 ```json
-[{"provider": "codex-cli"}]
+[{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
 
 **copilot-cli**: Wraps GitHub Copilot CLI (`gh copilot suggest`). Requires `gh` CLI and a Copilot subscription:

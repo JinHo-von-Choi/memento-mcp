@@ -1,230 +1,118 @@
 /**
  * Unit tests: CodexCliProvider
  *
- * 실제 Codex CLI 호출 0건 — runCodexCLI와 _rawIsCodexCLIAvailable을 mock으로 교체.
- * circuit breaker 상태는 테스트마다 recordSuccess로 초기화하여 격리한다.
- *
- * 작성자: 최진호
- * 작성일: 2026-04-18
+ * 실제 codex 바이너리 호출 0건 — lib/codex.js를 mock.module로 차단한다.
  */
 
-import { describe, it, before, afterEach } from "node:test";
-import assert                               from "node:assert/strict";
+import { beforeEach, describe, it, mock } from "node:test";
+import assert from "node:assert/strict";
 
-// ---------------------------------------------------------------------------
-// module-level mock 주입: node:test는 jest.mock 같은 자동 호이스팅이 없으므로
-// 테스트 내에서 동적으로 교체할 수 있도록 wrapper를 준비한다.
-// ---------------------------------------------------------------------------
+const mockRunCodexCLI   = mock.fn();
+const mockRawIsCodexCli = mock.fn();
 
-import * as codexModule from "../../lib/codex.js";
-
-let _isAvailableImpl = async () => true;
-let _runCodexImpl    = async () => '{"result":"ok"}';
-
-/** mock shim: _rawIsCodexCLIAvailable 교체 */
-function mockAvailable(impl) { _isAvailableImpl = impl; }
-/** mock shim: runCodexCLI 교체 */
-function mockRunCodex(impl)  { _runCodexImpl    = impl; }
-/** 기본값 복구 */
-function resetMocks() {
-  _isAvailableImpl = async () => true;
-  _runCodexImpl    = async () => '{"result":"ok"}';
-}
-
-// CodexCliProvider가 codexModule 함수를 직접 호출하므로
-// prototype-level patch를 통해 provider 동작을 제어한다.
-
-import { CodexCliProvider } from "../../lib/llm/providers/CodexCliProvider.js";
-
-const _origIsAvailable = codexModule._rawIsCodexCLIAvailable;
-const _origRunCodex    = codexModule.runCodexCLI;
-
-// node:test에서는 import가 live binding이 아니므로
-// provider 인스턴스 메서드를 직접 패치하는 방식으로 mock한다.
-
-function makeProvider() {
-  const p = new CodexCliProvider();
-  /** isAvailable: _rawIsCodexCLIAvailable 결과를 _isAvailableImpl로 대체 */
-  p.isAvailable = async () => _isAvailableImpl();
-  /** callJson 내부 runCodexCLI를 패치하기 위해 callJson을 래핑 */
-  const _origCallJson = p.callJson.bind(p);
-  p.callJson = async (prompt, options = {}) => {
-    const savedRunCodex = codexModule.runCodexCLI;
-    // 인스턴스 수준에서 callJson 재구현 (runCodexCLI mock 주입)
-    if (await p.isCircuitOpen()) {
-      throw new Error("codex-cli: circuit breaker open");
-    }
-    const finalPrompt = options.systemPrompt
-      ? `${options.systemPrompt}\n\n${prompt}`
-      : prompt;
-    try {
-      const raw    = await _runCodexImpl("", finalPrompt, options);
-      const { parseJsonResponse } = await import("../../lib/llm/util/parse-json.js");
-      const result = parseJsonResponse(raw);
-      await p.recordSuccess();
-      return result;
-    } catch (err) {
-      await p.recordFailure();
-      throw err;
-    }
-  };
-  return p;
-}
-
-import { circuitBreaker } from "../../lib/llm/util/circuit-breaker.js";
-import { redisClient }    from "../../lib/redis.js";
-
-import { after } from "node:test";
-after(async () => {
-  try { await redisClient.quit(); } catch (_) {}
+mock.module("../../lib/codex.js", {
+  exports: {
+    runCodexCLI            : (...args) => mockRunCodexCLI(...args),
+    _rawIsCodexCLIAvailable: (...args) => mockRawIsCodexCli(...args)
+  }
 });
 
-// ---------------------------------------------------------------------------
-// 테스트
-// ---------------------------------------------------------------------------
+const { CodexCliProvider } = await import("../../lib/llm/providers/CodexCliProvider.js");
+const { createProvider, listProviderNames } = await import("../../lib/llm/registry.js");
 
 describe("CodexCliProvider", () => {
-
-  afterEach(() => {
-    resetMocks();
+  beforeEach(() => {
+    mockRunCodexCLI.mock.resetCalls();
+    mockRawIsCodexCli.mock.resetCalls();
   });
 
-  // -------------------------------------------------------------------------
-  // isAvailable
-  // -------------------------------------------------------------------------
-
-  describe("isAvailable", () => {
-
-    it("codex 바이너리가 존재하면 true를 반환한다", async () => {
-      mockAvailable(async () => true);
-      const p = makeProvider();
-      assert.equal(await p.isAvailable(), true);
-    });
-
-    it("codex 바이너리가 없으면 false를 반환한다", async () => {
-      mockAvailable(async () => false);
-      const p = makeProvider();
-      assert.equal(await p.isAvailable(), false);
-    });
-
+  it("isAvailable: raw helper 결과를 그대로 반환한다", async () => {
+    mockRawIsCodexCli.mock.mockImplementationOnce(async () => true);
+    const provider = new CodexCliProvider();
+    assert.equal(await provider.isAvailable(), true);
   });
 
-  // -------------------------------------------------------------------------
-  // callText
-  // -------------------------------------------------------------------------
+  it("callText: JSON 전용 provider이므로 use callJson 에러를 던진다", async () => {
+    const provider = new CodexCliProvider();
 
-  describe("callText", () => {
-
-    it("항상 'use callJson' 에러를 던진다", async () => {
-      const p = new CodexCliProvider();
-      await assert.rejects(
-        () => p.callText("any prompt"),
-        /use callJson/
-      );
-    });
-
+    await assert.rejects(
+      () => provider.callText("hello"),
+      /use callJson/
+    );
   });
 
-  // -------------------------------------------------------------------------
-  // callJson — 성공
-  // -------------------------------------------------------------------------
-
-  describe("callJson - 성공", () => {
-
-    it("runCodexCLI가 JSON 문자열을 반환하면 파싱된 객체를 반환한다", async () => {
-      mockRunCodex(async () => '{"result":"ok","score":42}');
-      const p    = makeProvider();
-      const json = await p.callJson("test prompt");
-      assert.deepEqual(json, { result: "ok", score: 42 });
+  it("callJson: systemPrompt + JSON-only 가이드 + prompt를 helper로 전달한다", async () => {
+    mockRunCodexCLI.mock.mockImplementationOnce(async (stdinContent, prompt, options) => {
+      assert.equal(stdinContent, "");
+      assert.ok(prompt.includes("system rules"));
+      assert.ok(prompt.includes("Return one valid JSON value only."));
+      assert.ok(prompt.includes("user payload"));
+      assert.equal(options.model, "gpt-5.3-codex-spark");
+      assert.equal(options.timeoutMs, 1234);
+      return "{\"ok\":true,\"source\":\"codex-cli\"}";
     });
 
-    it("runCodexCLI가 markdown 펜스 감싼 JSON을 반환해도 파싱한다", async () => {
-      mockRunCodex(async () => "```json\n{\"key\":\"val\"}\n```");
-      const p    = makeProvider();
-      const json = await p.callJson("test prompt");
-      assert.deepEqual(json, { key: "val" });
+    const provider = new CodexCliProvider({ model: "default-model" });
+    const result = await provider.callJson("user payload", {
+      systemPrompt: "system rules",
+      model       : "gpt-5.3-codex-spark",
+      timeoutMs   : 1234
     });
 
-    it("systemPrompt가 있으면 prompt 앞에 prepend하여 호출한다", async () => {
-      let capturedPrompt = "";
-      mockRunCodex(async (_stdin, finalPrompt) => {
-        capturedPrompt = finalPrompt;
-        return '{"ok":true}';
-      });
-      const p = makeProvider();
-      await p.callJson("actual prompt", { systemPrompt: "SYSTEM" });
-      assert.match(capturedPrompt, /SYSTEM/);
-      assert.match(capturedPrompt, /actual prompt/);
-    });
-
+    assert.deepEqual(result, { ok: true, source: "codex-cli" });
   });
 
-  // -------------------------------------------------------------------------
-  // callJson — 실패
-  // -------------------------------------------------------------------------
-
-  describe("callJson - 실패", () => {
-
-    it("runCodexCLI가 throw하면 recordFailure를 호출하고 에러를 전파한다", async () => {
-      mockRunCodex(async () => { throw new Error("CLI failed"); });
-
-      const p              = makeProvider();
-      let   failureRecorded = false;
-      const _origRecord    = p.recordFailure.bind(p);
-      p.recordFailure      = async () => { failureRecorded = true; return _origRecord(); };
-
-      await assert.rejects(
-        () => p.callJson("test prompt"),
-        /CLI failed/
-      );
-      assert.equal(failureRecorded, true);
+  it("callJson: options.model이 없으면 provider config.model을 사용한다", async () => {
+    mockRunCodexCLI.mock.mockImplementationOnce(async (_stdinContent, _prompt, options) => {
+      assert.equal(options.model, "gpt-5.3-codex-spark");
+      return "{\"ok\":true}";
     });
 
-    it("runCodexCLI가 파싱 불가능한 문자열을 반환하면 에러를 던진다", async () => {
-      mockRunCodex(async () => "not json at all");
-      const p = makeProvider();
-      await assert.rejects(
-        () => p.callJson("test prompt"),
-        /failed to parse JSON/
-      );
-    });
+    const provider = new CodexCliProvider({ model: "gpt-5.3-codex-spark" });
+    const result = await provider.callJson("user payload");
 
+    assert.deepEqual(result, { ok: true });
   });
 
-  // -------------------------------------------------------------------------
-  // circuit breaker
-  // -------------------------------------------------------------------------
-
-  describe("circuit breaker", () => {
-
-    it("circuit이 열려 있으면 runCodexCLI를 호출하지 않고 에러를 던진다", async () => {
-      let runCodexCalled = false;
-      mockRunCodex(async () => { runCodexCalled = true; return '{"ok":true}'; });
-
-      const p = makeProvider();
-
-      /** circuit을 강제로 open 상태로 만든다 */
-      const _origIsCircuitOpen = p.isCircuitOpen.bind(p);
-      p.isCircuitOpen = async () => true;
-
-      await assert.rejects(
-        () => p.callJson("test prompt"),
-        /circuit breaker open/
-      );
-      assert.equal(runCodexCalled, false);
+  it("callJson: options.timeoutMs이 없으면 provider config.timeoutMs를 사용한다", async () => {
+    mockRunCodexCLI.mock.mockImplementationOnce(async (_stdinContent, _prompt, options) => {
+      assert.equal(options.timeoutMs, 2222);
+      return "{\"ok\":true}";
     });
 
-    it("circuit이 닫혀 있으면 runCodexCLI를 호출한다", async () => {
-      let runCodexCalled = false;
-      mockRunCodex(async () => { runCodexCalled = true; return '{"ok":true}'; });
+    const provider = new CodexCliProvider({ timeoutMs: 2222 });
+    const result = await provider.callJson("user payload");
 
-      const p = makeProvider();
-      p.isCircuitOpen = async () => false;
-
-      await p.callJson("test prompt");
-      assert.equal(runCodexCalled, true);
-    });
-
+    assert.deepEqual(result, { ok: true });
   });
 
+  it("callJson: circuit breaker open 상태면 helper 호출 없이 에러를 던진다", async () => {
+    const provider = new CodexCliProvider();
+    provider.isCircuitOpen = async () => true;
+
+    await assert.rejects(
+      () => provider.callJson("user payload"),
+      /circuit breaker open/
+    );
+
+    assert.equal(mockRunCodexCLI.mock.callCount(), 0);
+  });
+});
+
+describe("codex-cli registry wiring", () => {
+  it("listProviderNames: codex-cli를 노출한다", () => {
+    assert.ok(listProviderNames().includes("codex-cli"));
+  });
+
+  it("createProvider: codex-cli config로 provider 인스턴스를 생성한다", () => {
+    const provider = createProvider({
+      provider : "codex-cli",
+      model    : "gpt-5.3-codex-spark",
+      timeoutMs: 2222
+    });
+
+    assert.equal(provider?.name, "codex-cli");
+    assert.equal(provider?.config?.model, "gpt-5.3-codex-spark");
+    assert.equal(provider?.config?.timeoutMs, 2222);
+  });
 });

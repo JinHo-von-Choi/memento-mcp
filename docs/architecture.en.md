@@ -1054,12 +1054,12 @@ LLM_PRIMARY=gemini-cli
 [gemini-cli] -> fail -> [anthropic] -> fail -> [codex-cli] -> fail -> [copilot-cli] -> ...
 ```
 
-**codex-cli provider** (`lib/llm/providers/codex-cli.js`):
-1. `runCodexCLI(prompt, outputFile)` -- runs `codex exec --full-auto --skip-git-repo-check -o FILE`
+**codex-cli provider** (`lib/llm/providers/CodexCliProvider.js`):
+1. `runCodexCLI(stdinContent, prompt, options)` -- runs `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`
 2. Reads output file -> JSON parse -> return response
 - Authenticates via `OPENAI_API_KEY` or Codex CLI's own configuration file
 
-**copilot-cli provider** (`lib/llm/providers/copilot-cli.js`):
+**copilot-cli provider** (`lib/llm/providers/CopilotCliProvider.js`):
 - Calls GitHub Copilot CLI (`gh copilot suggest`) as a wrapper
 - Uses `extractJsonBlock()` utility to strip trailing statistics/banner text before JSON extraction
 

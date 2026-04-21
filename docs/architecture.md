@@ -1057,12 +1057,12 @@ LLM_PRIMARY=gemini-cli
 [gemini-cli] → 실패 → [anthropic] → 실패 → [codex-cli] → 실패 → [copilot-cli] → ...
 ```
 
-**codex-cli provider** (`lib/llm/providers/codex-cli.js`):
-1. `runCodexCLI(prompt, outputFile)` — `codex exec --full-auto --skip-git-repo-check -o FILE` 실행
+**codex-cli provider** (`lib/llm/providers/CodexCliProvider.js`):
+1. `runCodexCLI(stdinContent, prompt, options)` — `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 실행
 2. 결과 파일 읽기 → JSON 파싱 → 응답 반환
 - 환경변수 `OPENAI_API_KEY` 또는 Codex CLI 자체 설정 파일로 인증
 
-**copilot-cli provider** (`lib/llm/providers/copilot-cli.js`):
+**copilot-cli provider** (`lib/llm/providers/CopilotCliProvider.js`):
 - GitHub Copilot CLI(`gh copilot suggest`)를 래퍼로 호출
 - `extractJsonBlock()` 유틸리티로 응답 말미의 통계/배너 텍스트 제거 후 JSON 추출
 

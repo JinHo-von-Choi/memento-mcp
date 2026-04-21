@@ -72,7 +72,7 @@
 
 #### LLM Provider Fallback Chain (v2.8.0)
 
-Gemini CLI 외 12개 provider로 자동 fallback 가능. 기본값에서 기존 동작 완전 보존.
+Gemini CLI 외 14개 provider로 자동 fallback 가능. 기본값에서 기존 동작 완전 보존.
 
 ##### 기본 설정
 
@@ -103,9 +103,9 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 
 gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**
 
-**codex-cli**: `codex exec --full-auto --skip-git-repo-check -o FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`에 아래와 같이 지정한다:
+**codex-cli**: `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`에 아래와 같이 지정한다:
 ```json
-[{"provider": "codex-cli"}]
+[{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
 
 **copilot-cli**: GitHub Copilot CLI(`gh copilot suggest`)를 래퍼로 호출한다. `gh` CLI와 Copilot 구독이 필요하다:
