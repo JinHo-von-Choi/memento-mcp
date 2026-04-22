@@ -30,6 +30,7 @@ LLM_FALLBACKS='[
 ```
 
 Gemini CLI 실패 시 codex-cli → anthropic → openai 순차 시도.
+CLI provider(`gemini-cli`, `codex-cli`, `copilot-cli`, `qwen-cli`)도 `LLM_FALLBACKS`의 `model`, `timeoutMs`를 provider config로 전달받는다.
 
 ## Provider별 필수 필드
 

@@ -103,7 +103,7 @@ When REDIS_ENABLED=true, state is stored in Redis; otherwise in-memory.
 
 gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**
 
-**codex-cli**: Executes `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`. Authenticates via `OPENAI_API_KEY` or the Codex CLI config file. Specify in `LLM_FALLBACKS` as:
+**codex-cli**: Executes `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE`. Authenticates via `OPENAI_API_KEY` or the Codex CLI config file. `model` and `timeoutMs` in `LLM_FALLBACKS` are passed through to the actual CLI invocation:
 ```json
 [{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
@@ -113,7 +113,7 @@ gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama,
 [{"provider": "copilot-cli"}]
 ```
 
-**qwen-cli**: Wraps Alibaba Cloud Qwen Code CLI (`qwen`). Requires Qwen CLI authentication (`qwen auth`). When `model` is omitted, the CLI default model is used:
+**qwen-cli**: Wraps Alibaba Cloud Qwen Code CLI (`qwen`). Requires Qwen CLI authentication (`qwen auth`). `model` and `timeoutMs` from `LLM_FALLBACKS` are passed through as provider config, and when `model` is still omitted the CLI default model is used:
 ```json
 [{"provider": "qwen-cli"}]
 [{"provider": "qwen-cli", "model": "qwen-max"}]

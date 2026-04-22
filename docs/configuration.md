@@ -103,7 +103,7 @@ REDIS_ENABLED=true면 Redis에 상태 저장, 아니면 in-memory.
 
 gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama, vllm, deepseek, mistral, cohere, zai, **codex-cli**, **copilot-cli**, **qwen-cli**
 
-**codex-cli**: `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`에 아래와 같이 지정한다:
+**codex-cli**: `codex exec --skip-git-repo-check --sandbox read-only --output-last-message FILE` 명령을 실행한다. `OPENAI_API_KEY` 또는 Codex CLI 설정 파일로 인증한다. `LLM_FALLBACKS`의 `model`, `timeoutMs` 설정이 provider config를 통해 실제 CLI 호출까지 전달된다:
 ```json
 [{"provider": "codex-cli", "model": "gpt-5.3-codex-spark"}]
 ```
@@ -113,7 +113,7 @@ gemini-cli, anthropic, openai, google-gemini-api, groq, openrouter, xai, ollama,
 [{"provider": "copilot-cli"}]
 ```
 
-**qwen-cli**: Alibaba Cloud Qwen Code CLI(`qwen`)를 래퍼로 호출한다. Qwen CLI 인증 설정(`qwen auth`)이 필요하다. `model` 미지정 시 CLI 기본 모델을 사용한다:
+**qwen-cli**: Alibaba Cloud Qwen Code CLI(`qwen`)를 래퍼로 호출한다. Qwen CLI 인증 설정(`qwen auth`)이 필요하다. `LLM_FALLBACKS`의 `model`, `timeoutMs` 설정을 provider config로 전달하며, `model`까지 비어 있으면 CLI 기본 모델을 사용한다:
 ```json
 [{"provider": "qwen-cli"}]
 [{"provider": "qwen-cli", "model": "qwen-max"}]
