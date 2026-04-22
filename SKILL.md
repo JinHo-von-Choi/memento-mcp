@@ -2,13 +2,13 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v3.0.0
+## 현재 버전: v3.1.0
 
-v3.0.0은 v2.8.0 태그 이후 누적된 11개 incremental 빌드(v2.8.1 ~ v2.16.0)를 umbrella 릴리즈로 통합한 결과다. Admin Metrics Dashboard, 원격 CLI, X-RateLimit 헤더, dryRun, idempotencyKey, _meta 응답 래퍼, sparse fields, Mode preset, Affective tagging, 로컬 transformers.js 임베딩, LLM provider 폴백 체인, 세션 관리 CLI, session_rotate, claude.ai/ChatGPT/Copilot/Gemini OAuth DCR-less 호환, MCP 2025-06-18 스펙 준수가 모두 포함된다. 모든 신규 기능은 기본 비활성 또는 opt-in이므로 v2.8.0에서 직접 업그레이드해도 회귀가 없다. 하위의 `v2.8.0 Symbolic Memory`, `v2.7.0 Breaking Changes` 섹션은 해당 버전 이전에서 업그레이드하는 경우에도 여전히 유효하다. 도입 시점이 v2.x로 표기된 하위 "활용 가이드" 섹션들은 incremental 추적을 위한 참조이며 v3.0.0에 모두 포함된다.
+v3.1.0은 v3.0.0에서 예고된 deprecation 2건(recall/context 응답의 top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드, `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크)을 실제로 제거한 breaking 릴리즈다. `_meta.*` 경로와 `scripts/post-migrate-flexible-embedding-dims.js` 신 경로만 유효하다. v3.0.0 기반 기능(Admin Metrics Dashboard, 원격 CLI, X-RateLimit 헤더, dryRun, idempotencyKey, _meta 응답 래퍼, sparse fields, Mode preset, Affective tagging, 로컬 transformers.js 임베딩, LLM provider 폴백 체인, 세션 관리 CLI, session_rotate, claude.ai/ChatGPT/Copilot/Gemini OAuth DCR-less 호환, MCP 2025-06-18 스펙 준수, Symbolic Memory Layer)은 동일하게 유지된다. 하위의 `v2.8.0 Symbolic Memory`, `v2.7.0 Breaking Changes` 섹션은 해당 버전 이전에서 업그레이드하는 경우에도 여전히 유효하다.
 
-### Deprecation 공지 (v3.0.0 ~)
+### Removal Notice (v3.1.0)
 
-recall / context 응답의 top-level `_searchEventId` / `_memento_hint` / `_suggestion` 필드는 v3.0.0부터 `_meta.searchEventId` / `_meta.hints` / `_meta.suggestion`으로 이관되어 동일 값이 mirror 제공된다. top-level 필드는 v3.1.0에서 제거된다. 지금 바로 `_meta.*` 경로로 전환할 것.
+recall / context 응답의 top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드가 v3.1.0에서 완전히 제거됐다. 클라이언트는 `_meta.searchEventId` / `_meta.hints` / `_meta.suggestion` 경로만 사용해야 한다. top-level 필드에 의존하는 코드는 v3.0.0으로 고정하거나 `_meta.*`로 즉시 전환할 것.
 
 ---
 
@@ -70,7 +70,7 @@ const hint    = res._meta.hints;           // signal + trigger
 const suggest = res._meta.suggestion;      // recommendedTool + recommendedArgs
 ```
 
-top-level `_searchEventId` / `_memento_hint` / `_suggestion`은 동일 값이 mirror 제공되지만 v3.1.0에서 제거된다. `_meta.*` 경로를 사용할 것.
+top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드는 v3.1.0에서 완전히 제거됐다. `_meta.*` 경로만 사용할 것.
 
 #### fields 파라미터 (sparse fieldsets)
 

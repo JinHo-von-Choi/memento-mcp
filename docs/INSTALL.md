@@ -83,7 +83,7 @@ psql $DATABASE_URL -f lib/memory/migration-033-symbolic-hard-gate.sql           
 psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql                        # api_keys.default_mode + fragments.affect + fragments.idempotency_key (v2.9.0~v2.12.0 단일 번들)
 ```
 
-> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다. (v3.1.0까지 구 경로 `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크 유지)
+> **migration-007 재실행**: `EMBEDDING_DIMENSIONS`를 변경하거나 임베딩 제공자를 전환한 경우, `post-migrate-flexible-embedding-dims.js`를 재실행하면 `fragments` 테이블과 `morpheme_dict` 테이블의 벡터 차원이 동시에 갱신된다. (구 경로 `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크는 v3.1.0에서 제거됐다)
 
 > **migration-034-v2.16.0 CONCURRENTLY 옵션**: migration-034-v2.16.0-bundle은 트랜잭션 내에서 실행되므로 `CREATE UNIQUE INDEX`를 사용한다. 수백만 건 이상의 대규모 운영 테이블에서 잠금 최소화가 필요한 경우, `npm run migrate` 실행 전에 아래 두 문을 수동으로 실행하면 IF NOT EXISTS 가드에 의해 자동 실행 시 안전하게 SKIP된다.
 >

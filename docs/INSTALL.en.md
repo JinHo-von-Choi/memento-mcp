@@ -147,7 +147,7 @@ psql $DATABASE_URL -f lib/memory/migration-034-v2.16.0-bundle.sql  # api_keys.de
 # v2.12.0: fragments.idempotency_key column + two per-tenant partial unique indexes
 ```
 
-> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously. (Symlink from the old path `scripts/migration-007-flexible-embedding-dims.js` is retained until v3.1.0.)
+> **Re-running migration-007**: If you change `EMBEDDING_DIMENSIONS` or switch embedding providers, re-run `scripts/post-migrate-flexible-embedding-dims.js` to update the vector column dimensions in both the `fragments` and `morpheme_dict` tables simultaneously. (The backward-compatible symlink at `scripts/migration-007-flexible-embedding-dims.js` was removed in v3.1.0.)
 
 Since v1.8.0, automatic migration is supported. Instead of running each file manually:
 

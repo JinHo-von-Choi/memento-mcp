@@ -370,9 +370,9 @@ API 키의 일일 호출 제한을 변경한다. 마스터 키 인증 필요.
 | `_meta.hints` | 시스템이 제안하는 검색 개선 힌트 배열 |
 | `_meta.suggestion` | RecallSuggestionEngine 생성 힌트 객체 (감지된 문제 없으면 null) |
 
-기존 top-level `_searchEventId` / `_memento_hint` / `_suggestion` 필드는 하위 호환을 위해 v3.0.0에서도 동일 값으로 mirror 반환되지만 **v3.1.0에서 제거 예정 (DEPRECATED)** 이다. 클라이언트는 `_meta` 경로로 마이그레이션해야 한다.
+v3.1.0에서 top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드가 **제거됐다**. 동일 값은 `_meta.searchEventId` / `_meta.hints` / `_meta.suggestion`에만 존재한다. 클라이언트는 `_meta` 경로만 사용해야 한다.
 
-`_suggestion` (v2.9.0+, DEPRECATED — v3.1.0 제거 예정, `_meta.suggestion` 사용 권장): RecallSuggestionEngine이 현재 검색 패턴을 분석하여 생성한 힌트 객체. 감지된 문제가 없으면 `null`이다.
+`_meta.suggestion` (v2.9.0+): RecallSuggestionEngine이 현재 검색 패턴을 분석하여 생성한 힌트 객체. 감지된 문제가 없으면 `null`이다. (v3.0.0까지 top-level `_suggestion`에도 mirror 제공. v3.1.0에서 mirror 제거.)
 
 ```json
 {

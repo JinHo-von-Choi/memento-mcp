@@ -1,5 +1,31 @@
 # Changelog
 
+## [3.1.0] - 2026-04-21
+
+v3.0.0에서 예고된 deprecation 2건을 실제로 제거한다. v3.0.0으로 올라온 사용자 중 mirror 경로에 의존하던 클라이언트는 `_meta.*` 또는 신규 스크립트 경로로 전환이 필요하다.
+
+### Breaking Changes
+
+- **recall / context 응답 top-level mirror 필드 제거**: `_searchEventId`, `_memento_hint`, `_suggestion` 세 필드가 더 이상 응답 최상위에 포함되지 않는다. 동일 값은 v3.0.0부터 제공된 `_meta.searchEventId`, `_meta.hints`, `_meta.suggestion`에 그대로 존재. 클라이언트는 `_meta.*` 경로로 참조하도록 전환해야 한다.
+- **`scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크 제거**: 2026-04-19 이후 유지되던 구 경로 하위 호환이 종료됐다. 외부 스크립트·CI에서 구 경로를 참조하는 경우 `scripts/post-migrate-flexible-embedding-dims.js`로 갱신해야 한다.
+
+### Changed
+
+- `lib/tools/memory.js` 3곳(`tool_recall` caseMode 분기, `tool_recall` 일반 분기, `tool_context`)의 응답 조립부에서 top-level mirror 필드 삭제. `tool_context`는 `{ _memento_hint, _searchEventId, _suggestion, ...rest }` destructure로 내부 전달용 필드를 응답 직전에 분리하고 `_meta`에만 담는다.
+- `lib/openapi.js` info.version `3.0.0` → `3.1.0`
+
+### Migration Guide (v3.0.0 → v3.1.0)
+
+1. 클라이언트 코드에서 `response._searchEventId` → `response._meta.searchEventId`, `response._memento_hint` → `response._meta.hints[0]`, `response._suggestion` → `response._meta.suggestion`으로 교체
+2. CI·스크립트에서 `scripts/migration-007-flexible-embedding-dims.js` 참조가 있다면 `scripts/post-migrate-flexible-embedding-dims.js`로 일괄 치환
+3. `npm install` 후 `npm run migrate` — 신규 마이그레이션 없음. `package-lock.json`만 갱신
+
+### 회귀 가드
+
+기존 응답의 `_meta.*` 값은 v3.0.0 시점과 동일하게 생성되므로 `_meta` 경로만 사용하던 클라이언트는 영향이 없다.
+
+---
+
 ## [3.0.0] - 2026-04-21
 
 v2.8.0 태그 이후 누적된 un-tagged 빌드 11종(v2.8.1 ~ v2.16.0)을 umbrella 릴리즈로 통합한다. 개별 minor/patch 라벨은 CHANGELOG 하단 "Pre-3.0.0 incremental builds" 섹션에 상세 보존된다.

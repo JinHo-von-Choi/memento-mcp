@@ -203,4 +203,4 @@ v2.11.0 이후 recall 응답에서 `_searchEventId` 등의 top-level 필드가 `
 v2.11.0 H1에서 응답 메타데이터가 `_meta: { searchEventId, hints, suggestion }` 래퍼로 통합됐다.
 
 해결 방법:
-`_meta.searchEventId`로 접근한다. 기존 top-level 필드는 v3.0.0에서도 `_meta.*`와 동일 값으로 mirror 제공되지만 v3.1.0에서 제거될 예정이다. 클라이언트 코드를 `_meta` 내부 필드로 전환한다.
+`_meta.searchEventId`로 접근한다. 기존 top-level 필드는 v3.0.0까지 `_meta.*`와 동일 값으로 mirror 제공됐으나 v3.1.0에서 제거됐다. 클라이언트 코드를 `_meta` 내부 필드로 전환한다.

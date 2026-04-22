@@ -158,6 +158,6 @@ OOM (메모리 부족)
 ## 관련 문서
 
 - `tests/integration/README.md` — 통합 테스트 실행 가이드
-- `scripts/post-migrate-flexible-embedding-dims.js` — 차원 변경 마이그레이션 스크립트 (구 경로 `scripts/migration-007-flexible-embedding-dims.js`는 v3.1.0까지 심볼릭 링크 유지)
+- `scripts/post-migrate-flexible-embedding-dims.js` — 차원 변경 마이그레이션 스크립트 (구 경로 `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크는 v3.1.0에서 제거됐다)
 - `scripts/check-embedding-consistency.js` — 서버 기동 시 차원 일관성 검증 로직
 - `docs/configuration.md` — 전체 환경변수 목록 (EMBEDDING_PROVIDER, EMBEDDING_MODEL, EMBEDDING_DIMENSIONS 항목 포함)
