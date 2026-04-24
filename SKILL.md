@@ -2,9 +2,20 @@
 
 AI 에이전트가 Memento MCP 기억 서버를 최대 효율로 활용하기 위한 기술 레퍼런스.
 
-## 현재 버전: v3.1.0
+## 현재 버전: v3.1.1
 
-v3.1.0은 v3.0.0에서 예고된 deprecation 2건(recall/context 응답의 top-level `_searchEventId` / `_memento_hint` / `_suggestion` mirror 필드, `scripts/migration-007-flexible-embedding-dims.js` 심볼릭 링크)을 실제로 제거한 breaking 릴리즈다. `_meta.*` 경로와 `scripts/post-migrate-flexible-embedding-dims.js` 신 경로만 유효하다. v3.0.0 기반 기능(Admin Metrics Dashboard, 원격 CLI, X-RateLimit 헤더, dryRun, idempotencyKey, _meta 응답 래퍼, sparse fields, Mode preset, Affective tagging, 로컬 transformers.js 임베딩, LLM provider 폴백 체인, 세션 관리 CLI, session_rotate, claude.ai/ChatGPT/Copilot/Gemini OAuth DCR-less 호환, MCP 2025-06-18 스펙 준수, Symbolic Memory Layer)은 동일하게 유지된다. 하위의 `v2.8.0 Symbolic Memory`, `v2.7.0 Breaking Changes` 섹션은 해당 버전 이전에서 업그레이드하는 경우에도 여전히 유효하다.
+v3.1.1은 LLM Provider 체인 동시성 제어(concurrency semaphore + 429 cooldown)를 추가한 patch 릴리즈다. Ollama Cloud, fatherless 프록시 등에서 동시 요청 버스트로 인한 HTTP 429 연쇄 실패를 차단한다. 기본값으로 활성화되며 `LLM_CONCURRENCY_ENABLED=false`로 끌 수 있다. v3.1.0 기반 기능(`_meta.*` 경로, `scripts/post-migrate-flexible-embedding-dims.js`)은 그대로 유지된다.
+
+### LLM 동시성 제어 (v3.1.1)
+
+- Provider별 세마포어: chain key(`provider|baseUrl|model`) 기준 슬롯 한도 관리. 한도 초과 시 대기, 30초 타임아웃 초과 시 다음 fallback provider로 자동 전환.
+- 429 쿨다운: HTTP 429 수신 시 해당 provider가 500-2000ms 랜덤 지터 동안 `isAvailable()=false` 반환. 체인 스킵 후 재진입.
+- 내장 기본 한도: `ollama=16`, `openai@fatherless|gemma-4-31B-it=3`, `openai@xiaomi|mimo-v2-pro=8`, `*-cli=1`, 기타 provider=10.
+- 환경 변수:
+  - `LLM_CONCURRENCY_ENABLED=true|false` (기본 true, kill switch)
+  - `LLM_CONCURRENCY_WAIT_MS=30000` (슬롯 대기 타임아웃 ms)
+  - `LLM_CONCURRENCY` (JSON, chainKey 또는 provider name 기준 오버라이드)
+- 메트릭: `memento_llm_provider_concurrency_active{provider}`, `memento_llm_provider_concurrency_wait_ms{provider}`, `memento_llm_provider_429_total{provider}`
 
 ### Removal Notice (v3.1.0)
 
@@ -337,6 +348,7 @@ reflect 규칙:
 - 관련 파편들이 맥락상 연결되어 있다면 episode 유형 파편을 추가 생성
 - contextSummary로 전후관계 요약을 첨부
 - sessionId를 전달하면 이전 세션의 episode와 자동으로 preceded_by 엣지가 생성됨 (경험 흐름 그래프 보존)
+- reflect 한 번에 파편 수십 건을 쏟아붓지 않는다. 세션 진행 중 중요한 사실·결정·에러·절차가 확정되는 시점마다 remember로 즉시 개별 저장하고, 세션 종료 시 reflect는 그 세션의 narrative_summary와 open_questions 정리 및 누락분 최종 집계 용도로만 사용한다. 이 분할 저장 패턴이 중요도 가중, 키워드 정밀도, 링크 품질 모두에서 한 번에 몰아 넣는 reflect보다 유의미하게 우수하다.
 
 ## 키워드 작성 규칙 (가장 중요)
 

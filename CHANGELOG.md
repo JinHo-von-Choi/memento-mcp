@@ -1,5 +1,57 @@
 # Changelog
 
+## [3.1.1] - 2026-04-24
+
+LLM Provider 체인 동시성 제어를 추가해 Ollama Cloud, fatherless 프록시 등에서 동시 요청 버스트로 발생하던 HTTP 429 연쇄 실패를 차단한다. 실측상 ollama.com `gemma4:31b-cloud`는 20-24 동시 요청을 넘기면 429를 반환하고, fatherless `google/gemma-4-31B-it`는 동시 4까지만 허용한다. 33.3GB 메모리 피크 사건의 주요 원인이던 LLM 체인 폭주 루프를 완화한다.
+
+### Added
+
+- `lib/llm/util/semaphore.js` — Promise 기반 counting semaphore. `createSemaphore({ key, limit, waitTimeoutMs })`, `getSemaphore(key, limit, waitTimeoutMs)` (Map 캐시), `resetSemaphores()` (테스트용).
+- 디스패처 세마포어 wrap: `lib/llm/index.js`의 `llmJson` 루프가 provider 호출을 `acquire()`/`release()`로 감싼다. `waitTimeoutMs` 초과 시 해당 provider를 실패로 처리하고 다음 fallback으로 즉시 전환.
+- `_cooldownUntil` 필드 + `_setCooldown(ms)` 헬퍼를 `OllamaProvider` · `OpenAICompatibleProvider`에 추가. HTTP 429 수신 시 500-2000ms 랜덤 쿨다운 동안 `isAvailable()=false`.
+- 3개 Prometheus 메트릭:
+  - `memento_llm_provider_concurrency_active{provider}` — Gauge
+  - `memento_llm_provider_concurrency_wait_ms{provider}` — Histogram (buckets 1 ~ 30000ms)
+  - `memento_llm_provider_429_total{provider}` — Counter
+- 환경 변수:
+  - `LLM_CONCURRENCY_ENABLED` (default `true`, kill switch)
+  - `LLM_CONCURRENCY_WAIT_MS` (default `30000`)
+  - `LLM_CONCURRENCY` (JSON, chainKey 또는 provider name 기준 오버라이드)
+- 내장 기본 한도 (`lib/config.js` `DEFAULT_LLM_CONCURRENCY`):
+  - `ollama=16`
+  - `openai|https://fatherless.nerdvana.kr/v1|google/gemma-4-31B-it=3`
+  - `openai|https://token-plan-sgp.xiaomimimo.com/v1|mimo-v2-pro=8`
+  - `gemini-cli=1`, `copilot-cli=1`, `codex-cli=1`, `qwen-cli=1`
+  - 기타 provider = 10
+- 테스트 3종 추가 (총 20 케이스, 모두 통과):
+  - `tests/unit/llm-semaphore.test.js` (8 케이스)
+  - `tests/unit/llm-dispatcher-concurrency.test.js` (6 케이스)
+  - `tests/unit/llm-provider-cooldown.test.js` (6 케이스)
+
+### Changed
+
+- `lib/llm/index.js` `buildChain` 내부 dedupe key 생성 로직을 `buildChainKey(config)` 헬퍼로 추출. 세마포어 키와 동일 규약 사용.
+- `.env.example` LLM 섹션에 동시성 제어 env 3종 안내 블록 추가.
+
+### 회귀 가드
+
+- 기존 `llm-fallback-chain.test.js` (7) + `llm-circuit-breaker.test.js` (8) 15개 테스트 모두 그대로 통과
+- `LLM_CONCURRENCY_ENABLED=false`로 세마포어 완전 우회 가능 — 문제 발생 시 즉시 비활성화
+- 429 쿨다운은 기존 circuit breaker와 독립 메커니즘. circuit=장기 연속 실패 차단, 쿨다운=단기 동시성 완화
+
+### Migration Guide (v3.1.0 → v3.1.1)
+
+1. `npm install` — dependency 변화 없음, `package-lock.json`만 갱신
+2. 신규 env 변수 설정은 선택사항. 미설정 시 내장 기본값 사용
+3. `LLM_FALLBACKS` 내 provider chain key가 내장 기본값과 다르면 `LLM_CONCURRENCY='{...}'`로 명시
+4. 서비스 재시작 후 `memento_llm_provider_429_total` 메트릭 감시
+
+### 미해결 / 후속
+
+- MorphemeIndex 팬아웃 축소(reflect 1회 → tokenize N회 병렬)는 별도 이슈로 분리. `tokenizeBatch()` 배치 API 추가 검토는 v3.2.0 후보.
+
+---
+
 ## [3.1.0] - 2026-04-21
 
 v3.0.0에서 예고된 deprecation 2건을 실제로 제거한다. v3.0.0으로 올라온 사용자 중 mirror 경로에 의존하던 클라이언트는 `_meta.*` 또는 신규 스크립트 경로로 전환이 필요하다.
